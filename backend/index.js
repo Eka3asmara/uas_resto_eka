@@ -24,7 +24,6 @@ const turso = axios.create({
   },
 });
 
-// --- FUNGSI EKSEKUSI DATABASE ---
 async function dbExecute(sql, args = []) {
   try {
     const mappedArgs = args.map((arg) => {
@@ -57,12 +56,10 @@ async function dbExecute(sql, args = []) {
   }
 }
 
-// --- MIDDLEWARE PROTEKSI ---
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
   if (!token) return res.status(401).json({ message: "Akses Ditolak" });
-
   jwt.verify(token, process.env.JWT_SECRET || "secret", (err, user) => {
     if (err) return res.status(403).json({ message: "Sesi Habis" });
     req.user = user;
@@ -72,15 +69,8 @@ const authenticateToken = (req, res, next) => {
 
 // --- ROUTES ---
 
-app.get("/", (req, res) => {
-  res.json({
-    message: "Server Eka Resto Online",
-    status: "Ready",
-    db_status: tursoUrl ? "Configured" : "Missing",
-  });
-});
+app.get("/", (req, res) => res.json({ message: "Ready" }));
 
-// 1. Auth Route
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -88,115 +78,66 @@ app.post("/api/login", async (req, res) => {
       email,
     ]);
     if (rows.length === 0)
-      return res.status(401).json({ message: "Email tidak terdaftar!" });
-
+      return res.status(401).json({ message: "Email salah" });
     const isMatch = await bcrypt.compare(password, rows[0].password);
-    if (!isMatch) return res.status(401).json({ message: "Password salah!" });
-
+    if (!isMatch) return res.status(401).json({ message: "Password salah" });
     const token = jwt.sign(
-      { id: rows[0].id, email: rows[0].email },
+      { id: rows[0].id },
       process.env.JWT_SECRET || "secret",
       { expiresIn: "24h" },
     );
     res.json({ token });
   } catch (error) {
-    res.status(500).json({ message: "Kesalahan server" });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// 2. Dashboard Stats (PENTING)
+// ROUTE STATS DENGAN PROTEKSI ANGKA 0
 app.get("/api/stats", authenticateToken, async (req, res) => {
   try {
-    const menuData = await dbExecute("SELECT COUNT(*) as total FROM menu");
-    const pesananData = await dbExecute(
-      "SELECT COUNT(*) as total FROM pesanan",
-    );
-    const pendapatanData = await dbExecute(
+    const m = await dbExecute("SELECT COUNT(*) as total FROM menu");
+    const p = await dbExecute("SELECT COUNT(*) as total FROM pesanan");
+    const d = await dbExecute(
       "SELECT SUM(total_harga) as total FROM pembayaran WHERE status = 'lunas'",
     );
 
     res.json({
-      totalMenu: menuData.rows[0].total || 0,
-      totalPesanan: pesananData.rows[0].total || 0,
-      totalPendapatan: pendapatanData.rows[0].total || 0,
+      totalMenu: Number(m.rows[0]?.total) || 0,
+      totalPesanan: Number(p.rows[0]?.total) || 0,
+      totalPendapatan: Number(d.rows[0]?.total) || 0,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// 3. Menu, Pesanan, Pembayaran (Rute Standar)
 app.get("/api/menu", async (req, res) => {
-  try {
-    const { rows } = await dbExecute("SELECT * FROM menu ORDER BY id DESC");
-    res.json(rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  const { rows } = await dbExecute("SELECT * FROM menu ORDER BY id DESC");
+  res.json(rows);
 });
 
 app.post("/api/menu", authenticateToken, async (req, res) => {
   const { nama_menu, harga, kategori } = req.body;
-  try {
-    await dbExecute(
-      "INSERT INTO menu (nama_menu, harga, kategori) VALUES (?, ?, ?)",
-      [nama_menu, parseInt(harga), kategori],
-    );
-    res.json({ message: "Ok" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get("/api/pesanan", authenticateToken, async (req, res) => {
-  try {
-    const { rows } = await dbExecute("SELECT * FROM pesanan ORDER BY id DESC");
-    res.json(rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post("/api/pesanan", authenticateToken, async (req, res) => {
-  const { nama_pelanggan, total_harga, detail_pesanan } = req.body;
-  try {
-    const result = await dbExecute(
-      "INSERT INTO pesanan (nama_pelanggan, total_harga, detail_pesanan) VALUES (?, ?, ?) RETURNING id",
-      [nama_pelanggan, parseInt(total_harga), detail_pesanan],
-    );
-    await dbExecute(
-      "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga, status) VALUES (?, ?, ?, 'pending')",
-      [result.rows[0].id, nama_pelanggan, parseInt(total_harga)],
-    );
-    res.json({ message: "Ok" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  await dbExecute(
+    "INSERT INTO menu (nama_menu, harga, kategori) VALUES (?, ?, ?)",
+    [nama_menu, parseInt(harga), kategori],
+  );
+  res.json({ message: "Ok" });
 });
 
 app.get("/api/pembayaran", authenticateToken, async (req, res) => {
-  try {
-    const { rows } = await dbExecute(
-      "SELECT * FROM pembayaran ORDER BY id DESC",
-    );
-    res.json(rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  const { rows } = await dbExecute("SELECT * FROM pembayaran ORDER BY id DESC");
+  res.json(rows);
 });
 
 app.put("/api/pembayaran/:id", authenticateToken, async (req, res) => {
   const { metode, status } = req.body;
-  try {
-    await dbExecute("UPDATE pembayaran SET metode=?, status=? WHERE id=?", [
-      metode,
-      status,
-      parseInt(req.params.id),
-    ]);
-    res.json({ message: "Ok" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  await dbExecute("UPDATE pembayaran SET metode=?, status=? WHERE id=?", [
+    metode,
+    status,
+    parseInt(req.params.id),
+  ]);
+  res.json({ message: "Ok" });
 });
 
 module.exports = app;
