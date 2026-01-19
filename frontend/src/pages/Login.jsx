@@ -23,10 +23,13 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const response = await axios.post("http://localhost:3000/api/login", {
-        email: email,
-        password: password,
-      });
+      const response = await axios.post(
+        "https://uas-resto-eka.vercel.app/api/login",
+        {
+          email: email,
+          password: password,
+        },
+      );
 
       localStorage.setItem("token", response.data.token);
 
