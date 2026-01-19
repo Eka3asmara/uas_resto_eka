@@ -4,7 +4,12 @@ import { Utensils, ClipboardList, Banknote, RefreshCcw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 export default function Dashboard() {
-  const [stats, setStats] = useState({ menu: 0, pesanan: 0, pendapatan: 0 });
+  // 1. SESUAIKAN NAMA STATE DENGAN BACKEND (totalMenu, totalPesanan, totalPendapatan)
+  const [stats, setStats] = useState({
+    totalMenu: 0,
+    totalPesanan: 0,
+    totalPendapatan: 0,
+  });
   const [loading, setLoading] = useState(true);
 
   const navigate = useNavigate();
@@ -13,9 +18,14 @@ export default function Dashboard() {
     setLoading(true);
     try {
       const res = await api.get("/stats");
-      setStats(res.data);
+      // Memastikan data yang masuk memiliki struktur yang benar
+      setStats({
+        totalMenu: res.data.totalMenu || 0,
+        totalPesanan: res.data.totalPesanan || 0,
+        totalPendapatan: res.data.totalPendapatan || 0,
+      });
     } catch (err) {
-      console.error(err);
+      console.error("Gagal mengambil statistik:", err);
     } finally {
       setLoading(false);
     }
@@ -58,7 +68,8 @@ export default function Dashboard() {
         {[
           {
             label: "Total Menu",
-            val: stats.menu,
+            // GUNAKAN totalMenu
+            val: stats.totalMenu,
             icon: <Utensils size={32} />,
             color: "border-yellow-500",
             textSize: "text-3xl",
@@ -66,7 +77,8 @@ export default function Dashboard() {
           },
           {
             label: "Total Pesanan",
-            val: stats.pesanan,
+            // GUNAKAN totalPesanan
+            val: stats.totalPesanan,
             icon: <ClipboardList size={32} />,
             color: "border-gray-700",
             textSize: "text-3xl",
@@ -74,7 +86,8 @@ export default function Dashboard() {
           },
           {
             label: "Total Pendapatan",
-            val: `Rp ${stats.pendapatan.toLocaleString("id-ID")}`,
+            // GUNAKAN totalPendapatan DAN TAMBAHKAN PROTEKSI || 0
+            val: `Rp ${(stats.totalPendapatan || 0).toLocaleString("id-ID")}`,
             icon: <Banknote size={32} />,
             color: "border-yellow-500",
             textSize: "text-2xl",
