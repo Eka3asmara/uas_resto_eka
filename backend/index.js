@@ -72,11 +72,15 @@ const authenticateToken = (req, res, next) => {
 
 // --- ROUTES ---
 
+// 1. Tambahkan Route Utama agar tidak "Cannot GET /"
 app.get("/", (req, res) => {
-  res.json({ message: "Server Eka Resto Online", status: "Ready" });
+  res.json({
+    message: "Server Eka Resto Online",
+    status: "Ready",
+    db_status: tursoUrl ? "Configured" : "Missing URL",
+  });
 });
 
-// 1. Auth Route
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -84,89 +88,101 @@ app.post("/api/login", async (req, res) => {
       email,
     ]);
     if (rows.length === 0)
-      return res.status(401).json({ message: "Email salah" });
+      return res.status(401).json({ message: "Email tidak terdaftar!" });
+
     const isMatch = await bcrypt.compare(password, rows[0].password);
-    if (!isMatch) return res.status(401).json({ message: "Password salah" });
+    if (!isMatch) return res.status(401).json({ message: "Password salah!" });
+
     const token = jwt.sign(
-      { id: rows[0].id },
+      { id: rows[0].id, email: rows[0].email },
       process.env.JWT_SECRET || "secret",
       { expiresIn: "24h" },
     );
     res.json({ token });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ message: "Kesalahan server" });
   }
 });
 
-// 2. Dashboard Stats (PENTING)
-app.get("/api/stats", authenticateToken, async (req, res) => {
+app.get("/api/menu", async (req, res) => {
   try {
-    const m = await dbExecute("SELECT COUNT(*) as total FROM menu");
-    const p = await dbExecute("SELECT COUNT(*) as total FROM pesanan");
-    const d = await dbExecute(
-      "SELECT SUM(total_harga) as total FROM pembayaran WHERE status = 'lunas'",
-    );
-    res.json({
-      totalMenu: m.rows[0].total || 0,
-      totalPesanan: p.rows[0].total || 0,
-      totalPendapatan: d.rows[0].total || 0,
-    });
+    const { rows } = await dbExecute("SELECT * FROM menu ORDER BY id DESC");
+    res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// 3. Menu & Pesanan (Lengkap)
-app.get("/api/menu", async (req, res) => {
-  const { rows } = await dbExecute("SELECT * FROM menu ORDER BY id DESC");
-  res.json(rows);
-});
-
 app.post("/api/menu", authenticateToken, async (req, res) => {
   const { nama_menu, harga, kategori } = req.body;
-  await dbExecute(
-    "INSERT INTO menu (nama_menu, harga, kategori) VALUES (?, ?, ?)",
-    [nama_menu, parseInt(harga), kategori],
-  );
-  res.json({ message: "Ok" });
-});
-
-app.delete("/api/menu/:id", authenticateToken, async (req, res) => {
-  await dbExecute("DELETE FROM menu WHERE id = ?", [parseInt(req.params.id)]);
-  res.json({ message: "Ok" });
+  try {
+    await dbExecute(
+      "INSERT INTO menu (nama_menu, harga, kategori) VALUES (?, ?, ?)",
+      [nama_menu, parseInt(harga), kategori],
+    );
+    res.json({ message: "Menu Ditambah" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get("/api/pesanan", authenticateToken, async (req, res) => {
-  const { rows } = await dbExecute("SELECT * FROM pesanan ORDER BY id DESC");
-  res.json(rows);
+  try {
+    const { rows } = await dbExecute("SELECT * FROM pesanan ORDER BY id DESC");
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post("/api/pesanan", authenticateToken, async (req, res) => {
   const { nama_pelanggan, total_harga, detail_pesanan } = req.body;
-  const result = await dbExecute(
-    "INSERT INTO pesanan (nama_pelanggan, total_harga, detail_pesanan) VALUES (?, ?, ?) RETURNING id",
-    [nama_pelanggan, parseInt(total_harga), detail_pesanan],
-  );
-  await dbExecute(
-    "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga, status) VALUES (?, ?, ?, 'pending')",
-    [result.rows[0].id, nama_pelanggan, parseInt(total_harga)],
-  );
-  res.json({ message: "Ok" });
+  try {
+    const result = await dbExecute(
+      "INSERT INTO pesanan (nama_pelanggan, total_harga, detail_pesanan) VALUES (?, ?, ?) RETURNING id",
+      [nama_pelanggan, parseInt(total_harga), detail_pesanan],
+    );
+    const newId = result.rows[0].id;
+    await dbExecute(
+      "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga) VALUES (?, ?, ?)",
+      [newId, nama_pelanggan, parseInt(total_harga)],
+    );
+    res.json({ message: "Ok" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get("/api/pembayaran", authenticateToken, async (req, res) => {
-  const { rows } = await dbExecute("SELECT * FROM pembayaran ORDER BY id DESC");
-  res.json(rows);
+  try {
+    const { rows } = await dbExecute(
+      "SELECT * FROM pembayaran ORDER BY id DESC",
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.put("/api/pembayaran/:id", authenticateToken, async (req, res) => {
   const { metode, status } = req.body;
-  await dbExecute("UPDATE pembayaran SET metode=?, status=? WHERE id=?", [
-    metode,
-    status,
-    parseInt(req.params.id),
-  ]);
-  res.json({ message: "Ok" });
+  try {
+    await dbExecute("UPDATE pembayaran SET metode=?, status=? WHERE id=?", [
+      metode,
+      status,
+      parseInt(req.params.id),
+    ]);
+    res.json({ message: "Ok" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
+// PENTING UNTUK VERCEL: Export app
 module.exports = app;
+
+// Jalankan server jika tidak di lingkungan Vercel
+if (process.env.NODE_ENV !== "production") {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => console.log(`Server jalan di port ${PORT}`));
+}
