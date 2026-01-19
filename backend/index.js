@@ -6,7 +6,7 @@ const axios = require("axios");
 const bcrypt = require("bcrypt");
 
 const app = express();
-app.use(cors({ origin: "https://uas-resto-eka-gb9f.vercel.app" }));
+app.use(cors());
 app.use(express.json());
 
 // --- KONFIGURASI TURSO ---
@@ -72,15 +72,15 @@ const authenticateToken = (req, res, next) => {
 
 // --- ROUTES ---
 
-// 1. Tambahkan Route Utama agar tidak "Cannot GET /"
 app.get("/", (req, res) => {
   res.json({
     message: "Server Eka Resto Online",
     status: "Ready",
-    db_status: tursoUrl ? "Configured" : "Missing URL",
+    db_status: tursoUrl ? "Configured" : "Missing",
   });
 });
 
+// 1. Auth Route
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -104,6 +104,28 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
+// 2. Dashboard Stats (PENTING)
+app.get("/api/stats", authenticateToken, async (req, res) => {
+  try {
+    const menuData = await dbExecute("SELECT COUNT(*) as total FROM menu");
+    const pesananData = await dbExecute(
+      "SELECT COUNT(*) as total FROM pesanan",
+    );
+    const pendapatanData = await dbExecute(
+      "SELECT SUM(total_harga) as total FROM pembayaran WHERE status = 'lunas'",
+    );
+
+    res.json({
+      totalMenu: menuData.rows[0].total || 0,
+      totalPesanan: pesananData.rows[0].total || 0,
+      totalPendapatan: pendapatanData.rows[0].total || 0,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3. Menu, Pesanan, Pembayaran (Rute Standar)
 app.get("/api/menu", async (req, res) => {
   try {
     const { rows } = await dbExecute("SELECT * FROM menu ORDER BY id DESC");
@@ -120,7 +142,7 @@ app.post("/api/menu", authenticateToken, async (req, res) => {
       "INSERT INTO menu (nama_menu, harga, kategori) VALUES (?, ?, ?)",
       [nama_menu, parseInt(harga), kategori],
     );
-    res.json({ message: "Menu Ditambah" });
+    res.json({ message: "Ok" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -142,10 +164,9 @@ app.post("/api/pesanan", authenticateToken, async (req, res) => {
       "INSERT INTO pesanan (nama_pelanggan, total_harga, detail_pesanan) VALUES (?, ?, ?) RETURNING id",
       [nama_pelanggan, parseInt(total_harga), detail_pesanan],
     );
-    const newId = result.rows[0].id;
     await dbExecute(
-      "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga) VALUES (?, ?, ?)",
-      [newId, nama_pelanggan, parseInt(total_harga)],
+      "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga, status) VALUES (?, ?, ?, 'pending')",
+      [result.rows[0].id, nama_pelanggan, parseInt(total_harga)],
     );
     res.json({ message: "Ok" });
   } catch (err) {
@@ -178,11 +199,4 @@ app.put("/api/pembayaran/:id", authenticateToken, async (req, res) => {
   }
 });
 
-// PENTING UNTUK VERCEL: Export app
 module.exports = app;
-
-// Jalankan server jika tidak di lingkungan Vercel
-if (process.env.NODE_ENV !== "production") {
-  const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => console.log(`Server jalan di port ${PORT}`));
-}
