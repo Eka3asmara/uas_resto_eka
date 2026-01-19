@@ -1,3 +1,5 @@
+import axios from "axios";
+
 const api = axios.create({
   baseURL: "https://uas-resto-eka.vercel.app/api", 
 });
