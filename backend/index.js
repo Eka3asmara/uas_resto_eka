@@ -111,20 +111,30 @@ app.get("/api/stats", authenticateToken, async (req, res) => {
   }
 });
 
-app.get("/api/menu", async (req, res) => {
-  const { rows } = await dbExecute("SELECT * FROM menu ORDER BY id DESC");
-  res.json(rows);
+// --- TAMBAHKAN INI ---
+app.get("/api/pesanan", authenticateToken, async (req, res) => {
+  try {
+    const { rows } = await dbExecute("SELECT * FROM pesanan ORDER BY id DESC");
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-app.post("/api/menu", authenticateToken, async (req, res) => {
-  const { nama_menu, harga, kategori } = req.body;
-  await dbExecute(
-    "INSERT INTO menu (nama_menu, harga, kategori) VALUES (?, ?, ?)",
-    [nama_menu, parseInt(harga), kategori],
-  );
-  res.json({ message: "Ok" });
+app.post("/api/pesanan", authenticateToken, async (req, res) => {
+  const { customer_name, items, total_harga } = req.body;
+  try {
+    // Logika simpan pesanan Anda di sini
+    await dbExecute(
+      "INSERT INTO pesanan (customer_name, items, total_harga) VALUES (?, ?, ?)",
+      [customer_name, JSON.stringify(items), total_harga],
+    );
+    res.json({ message: "Pesanan berhasil dibuat" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
-
+// --------------------
 app.get("/api/pembayaran", authenticateToken, async (req, res) => {
   const { rows } = await dbExecute("SELECT * FROM pembayaran ORDER BY id DESC");
   res.json(rows);
