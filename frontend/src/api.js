@@ -1,11 +1,10 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "https://uas-resto-eka.vercel.app/api", 
+  baseURL: "https://uas-resto-eka.vercel.app/api",
 });
 
-export default api;
-
+// Interceptor untuk Request (Menambahkan Token)
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("token");
@@ -19,6 +18,7 @@ api.interceptors.request.use(
   },
 );
 
+// Interceptor untuk Response (Menangani Error Auth)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -33,4 +33,5 @@ api.interceptors.response.use(
   },
 );
 
+// HANYA SATU EXPORT DI PALING BAWAH
 export default api;
