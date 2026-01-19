@@ -72,16 +72,11 @@ const authenticateToken = (req, res, next) => {
 
 // --- ROUTES ---
 
-// 1. Route Utama Check Server
 app.get("/", (req, res) => {
-  res.json({
-    message: "Server Eka Resto Online",
-    status: "Ready",
-    db_status: tursoUrl ? "Configured" : "Missing URL",
-  });
+  res.json({ message: "Server Eka Resto Online", status: "Ready" });
 });
 
-// 2. Auth Route
+// 1. Auth Route
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -89,146 +84,89 @@ app.post("/api/login", async (req, res) => {
       email,
     ]);
     if (rows.length === 0)
-      return res.status(401).json({ message: "Email tidak terdaftar!" });
-
+      return res.status(401).json({ message: "Email salah" });
     const isMatch = await bcrypt.compare(password, rows[0].password);
-    if (!isMatch) return res.status(401).json({ message: "Password salah!" });
-
+    if (!isMatch) return res.status(401).json({ message: "Password salah" });
     const token = jwt.sign(
-      { id: rows[0].id, email: rows[0].email },
+      { id: rows[0].id },
       process.env.JWT_SECRET || "secret",
       { expiresIn: "24h" },
     );
     res.json({ token });
   } catch (error) {
-    res.status(500).json({ message: "Kesalahan server" });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// 3. Dashboard Stats Route (PENTING AGAR TIDAK 0)
+// 2. Dashboard Stats (PENTING)
 app.get("/api/stats", authenticateToken, async (req, res) => {
   try {
-    const menuCount = await dbExecute("SELECT COUNT(*) as total FROM menu");
-    const pesananCount = await dbExecute(
-      "SELECT COUNT(*) as total FROM pesanan",
-    );
-    const pendapatanSum = await dbExecute(
+    const m = await dbExecute("SELECT COUNT(*) as total FROM menu");
+    const p = await dbExecute("SELECT COUNT(*) as total FROM pesanan");
+    const d = await dbExecute(
       "SELECT SUM(total_harga) as total FROM pembayaran WHERE status = 'lunas'",
     );
-
     res.json({
-      totalMenu: menuCount.rows[0].total || 0,
-      totalPesanan: pesananCount.rows[0].total || 0,
-      totalPendapatan: pendapatanSum.rows[0].total || 0,
+      totalMenu: m.rows[0].total || 0,
+      totalPesanan: p.rows[0].total || 0,
+      totalPendapatan: d.rows[0].total || 0,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// 4. Menu Routes
+// 3. Menu & Pesanan (Lengkap)
 app.get("/api/menu", async (req, res) => {
-  try {
-    const { rows } = await dbExecute("SELECT * FROM menu ORDER BY id DESC");
-    res.json(rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  const { rows } = await dbExecute("SELECT * FROM menu ORDER BY id DESC");
+  res.json(rows);
 });
 
 app.post("/api/menu", authenticateToken, async (req, res) => {
   const { nama_menu, harga, kategori } = req.body;
-  try {
-    await dbExecute(
-      "INSERT INTO menu (nama_menu, harga, kategori) VALUES (?, ?, ?)",
-      [nama_menu, parseInt(harga), kategori],
-    );
-    res.json({ message: "Menu Ditambah" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.put("/api/menu/:id", authenticateToken, async (req, res) => {
-  const { nama_menu, harga, kategori } = req.body;
-  try {
-    await dbExecute(
-      "UPDATE menu SET nama_menu=?, harga=?, kategori=? WHERE id=?",
-      [nama_menu, parseInt(harga), kategori, parseInt(req.params.id)],
-    );
-    res.json({ message: "Menu Diperbarui" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  await dbExecute(
+    "INSERT INTO menu (nama_menu, harga, kategori) VALUES (?, ?, ?)",
+    [nama_menu, parseInt(harga), kategori],
+  );
+  res.json({ message: "Ok" });
 });
 
 app.delete("/api/menu/:id", authenticateToken, async (req, res) => {
-  try {
-    await dbExecute("DELETE FROM menu WHERE id = ?", [parseInt(req.params.id)]);
-    res.json({ message: "Menu Dihapus" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  await dbExecute("DELETE FROM menu WHERE id = ?", [parseInt(req.params.id)]);
+  res.json({ message: "Ok" });
 });
 
-// 5. Pesanan Routes
 app.get("/api/pesanan", authenticateToken, async (req, res) => {
-  try {
-    const { rows } = await dbExecute("SELECT * FROM pesanan ORDER BY id DESC");
-    res.json(rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  const { rows } = await dbExecute("SELECT * FROM pesanan ORDER BY id DESC");
+  res.json(rows);
 });
 
 app.post("/api/pesanan", authenticateToken, async (req, res) => {
   const { nama_pelanggan, total_harga, detail_pesanan } = req.body;
-  try {
-    const result = await dbExecute(
-      "INSERT INTO pesanan (nama_pelanggan, total_harga, detail_pesanan) VALUES (?, ?, ?) RETURNING id",
-      [nama_pelanggan, parseInt(total_harga), detail_pesanan],
-    );
-    const newId = result.rows[0].id;
-    await dbExecute(
-      "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga, status) VALUES (?, ?, ?, ?)",
-      [newId, nama_pelanggan, parseInt(total_harga), "pending"],
-    );
-    res.json({ message: "Pesanan Berhasil" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  const result = await dbExecute(
+    "INSERT INTO pesanan (nama_pelanggan, total_harga, detail_pesanan) VALUES (?, ?, ?) RETURNING id",
+    [nama_pelanggan, parseInt(total_harga), detail_pesanan],
+  );
+  await dbExecute(
+    "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga, status) VALUES (?, ?, ?, 'pending')",
+    [result.rows[0].id, nama_pelanggan, parseInt(total_harga)],
+  );
+  res.json({ message: "Ok" });
 });
 
-// 6. Pembayaran Routes
 app.get("/api/pembayaran", authenticateToken, async (req, res) => {
-  try {
-    const { rows } = await dbExecute(
-      "SELECT * FROM pembayaran ORDER BY id DESC",
-    );
-    res.json(rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  const { rows } = await dbExecute("SELECT * FROM pembayaran ORDER BY id DESC");
+  res.json(rows);
 });
 
 app.put("/api/pembayaran/:id", authenticateToken, async (req, res) => {
   const { metode, status } = req.body;
-  try {
-    await dbExecute("UPDATE pembayaran SET metode=?, status=? WHERE id=?", [
-      metode,
-      status,
-      parseInt(req.params.id),
-    ]);
-    res.json({ message: "Pembayaran Diperbarui" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  await dbExecute("UPDATE pembayaran SET metode=?, status=? WHERE id=?", [
+    metode,
+    status,
+    parseInt(req.params.id),
+  ]);
+  res.json({ message: "Ok" });
 });
 
-// --- EXPORT UNTUK VERCEL ---
 module.exports = app;
-
-if (process.env.NODE_ENV !== "production") {
-  const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => console.log(`Server jalan di port ${PORT}`));
-}
