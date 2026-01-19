@@ -72,7 +72,7 @@ const authenticateToken = (req, res, next) => {
 
 // --- ROUTES ---
 
-// 1. Tambahkan Route Utama agar tidak "Cannot GET /"
+// 1. Route Utama Check Server
 app.get("/", (req, res) => {
   res.json({
     message: "Server Eka Resto Online",
@@ -81,6 +81,7 @@ app.get("/", (req, res) => {
   });
 });
 
+// 2. Auth Route
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -104,6 +105,28 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
+// 3. Dashboard Stats Route (PENTING AGAR TIDAK 0)
+app.get("/api/stats", authenticateToken, async (req, res) => {
+  try {
+    const menuCount = await dbExecute("SELECT COUNT(*) as total FROM menu");
+    const pesananCount = await dbExecute(
+      "SELECT COUNT(*) as total FROM pesanan",
+    );
+    const pendapatanSum = await dbExecute(
+      "SELECT SUM(total_harga) as total FROM pembayaran WHERE status = 'lunas'",
+    );
+
+    res.json({
+      totalMenu: menuCount.rows[0].total || 0,
+      totalPesanan: pesananCount.rows[0].total || 0,
+      totalPendapatan: pendapatanSum.rows[0].total || 0,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 4. Menu Routes
 app.get("/api/menu", async (req, res) => {
   try {
     const { rows } = await dbExecute("SELECT * FROM menu ORDER BY id DESC");
@@ -126,6 +149,29 @@ app.post("/api/menu", authenticateToken, async (req, res) => {
   }
 });
 
+app.put("/api/menu/:id", authenticateToken, async (req, res) => {
+  const { nama_menu, harga, kategori } = req.body;
+  try {
+    await dbExecute(
+      "UPDATE menu SET nama_menu=?, harga=?, kategori=? WHERE id=?",
+      [nama_menu, parseInt(harga), kategori, parseInt(req.params.id)],
+    );
+    res.json({ message: "Menu Diperbarui" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/menu/:id", authenticateToken, async (req, res) => {
+  try {
+    await dbExecute("DELETE FROM menu WHERE id = ?", [parseInt(req.params.id)]);
+    res.json({ message: "Menu Dihapus" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5. Pesanan Routes
 app.get("/api/pesanan", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute("SELECT * FROM pesanan ORDER BY id DESC");
@@ -144,15 +190,16 @@ app.post("/api/pesanan", authenticateToken, async (req, res) => {
     );
     const newId = result.rows[0].id;
     await dbExecute(
-      "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga) VALUES (?, ?, ?)",
-      [newId, nama_pelanggan, parseInt(total_harga)],
+      "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga, status) VALUES (?, ?, ?, ?)",
+      [newId, nama_pelanggan, parseInt(total_harga), "pending"],
     );
-    res.json({ message: "Ok" });
+    res.json({ message: "Pesanan Berhasil" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
+// 6. Pembayaran Routes
 app.get("/api/pembayaran", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute(
@@ -172,16 +219,15 @@ app.put("/api/pembayaran/:id", authenticateToken, async (req, res) => {
       status,
       parseInt(req.params.id),
     ]);
-    res.json({ message: "Ok" });
+    res.json({ message: "Pembayaran Diperbarui" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// PENTING UNTUK VERCEL: Export app
+// --- EXPORT UNTUK VERCEL ---
 module.exports = app;
 
-// Jalankan server jika tidak di lingkungan Vercel
 if (process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => console.log(`Server jalan di port ${PORT}`));
