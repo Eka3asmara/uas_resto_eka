@@ -1,7 +1,5 @@
-import axios from "axios";
-
 const api = axios.create({
-  baseURL: "https://nama-proyek-backend-anda.vercel.app/api", 
+  baseURL: "https://uas-resto-eka.vercel.app/api", 
 });
 
 export default api;
