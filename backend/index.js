@@ -6,15 +6,7 @@ const axios = require("axios");
 const bcrypt = require("bcrypt");
 
 const app = express();
-
-// Konfigurasi CORS: Sesuaikan origin dengan URL frontend Anda
-app.use(
-  cors({
-    origin: ["https://uas-resto-eka-gb9f.vercel.app", "http://localhost:3000"],
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  }),
-);
+app.use(cors({ origin: "https://uas-resto-eka-gb9f.vercel.app" }));
 app.use(express.json());
 
 // --- KONFIGURASI TURSO ---
@@ -32,7 +24,7 @@ const turso = axios.create({
   },
 });
 
-// --- FUNGSI EKSEKUSI DATABASE (FIXED: Mengembalikan lastInsertRowid) ---
+// --- FUNGSI EKSEKUSI DATABASE ---
 async function dbExecute(sql, args = []) {
   try {
     const mappedArgs = args.map((arg) => {
@@ -49,10 +41,8 @@ async function dbExecute(sql, args = []) {
     const resultResponse = response.data.results[0];
     if (resultResponse.type === "error")
       throw new Error(resultResponse.error.message);
-
     const result = resultResponse.response.result;
     return {
-      lastInsertRowid: result.last_insert_rowid, // Penting untuk relasi tabel
       rows: result.rows.map((row) => {
         let obj = {};
         result.cols.forEach((col, i) => {
@@ -71,7 +61,6 @@ async function dbExecute(sql, args = []) {
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
-
   if (!token) return res.status(401).json({ message: "Akses Ditolak" });
 
   jwt.verify(token, process.env.JWT_SECRET || "secret", (err, user) => {
@@ -83,11 +72,15 @@ const authenticateToken = (req, res, next) => {
 
 // --- ROUTES ---
 
+// 1. Tambahkan Route Utama agar tidak "Cannot GET /"
 app.get("/", (req, res) => {
-  res.json({ message: "Server Eka Resto Online", status: "Ready" });
+  res.json({
+    message: "Server Eka Resto Online",
+    status: "Ready",
+    db_status: tursoUrl ? "Configured" : "Missing URL",
+  });
 });
 
-// AUTH
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -111,7 +104,6 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-// MENU
 app.get("/api/menu", async (req, res) => {
   try {
     const { rows } = await dbExecute("SELECT * FROM menu ORDER BY id DESC");
@@ -134,7 +126,6 @@ app.post("/api/menu", authenticateToken, async (req, res) => {
   }
 });
 
-// PESANAN (FIXED: Penanganan JSON & Pembayaran Otomatis)
 app.get("/api/pesanan", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute("SELECT * FROM pesanan ORDER BY id DESC");
@@ -147,75 +138,21 @@ app.get("/api/pesanan", authenticateToken, async (req, res) => {
 app.post("/api/pesanan", authenticateToken, async (req, res) => {
   const { nama_pelanggan, total_harga, detail_pesanan } = req.body;
   try {
-    // Pastikan detail_pesanan adalah string JSON
-    const detailStr =
-      typeof detail_pesanan === "string"
-        ? detail_pesanan
-        : JSON.stringify(detail_pesanan || []);
-
     const result = await dbExecute(
-      "INSERT INTO pesanan (nama_pelanggan, total_harga, detail_pesanan) VALUES (?, ?, ?)",
-      [nama_pelanggan, parseInt(total_harga), detailStr],
+      "INSERT INTO pesanan (nama_pelanggan, total_harga, detail_pesanan) VALUES (?, ?, ?) RETURNING id",
+      [nama_pelanggan, parseInt(total_harga), detail_pesanan],
     );
-
-    const newOrderId = result.lastInsertRowid;
-
-    // Otomatis buat data pembayaran
+    const newId = result.rows[0].id;
     await dbExecute(
-      "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga, status, metode) VALUES (?, ?, ?, ?, ?)",
-      [
-        parseInt(newOrderId),
-        nama_pelanggan,
-        parseInt(total_harga),
-        "pending",
-        "cash",
-      ],
+      "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga) VALUES (?, ?, ?)",
+      [newId, nama_pelanggan, parseInt(total_harga)],
     );
-
-    res.json({ message: "Ok", id: newOrderId });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.put("/api/pesanan/:id", authenticateToken, async (req, res) => {
-  const { nama_pelanggan, total_harga, detail_pesanan } = req.body;
-  try {
-    const detailStr =
-      typeof detail_pesanan === "string"
-        ? detail_pesanan
-        : JSON.stringify(detail_pesanan || []);
-    const cleanId = parseInt(req.params.id.toString().split(":")[0]);
-
-    await dbExecute(
-      "UPDATE pesanan SET nama_pelanggan=?, total_harga=?, detail_pesanan=? WHERE id=?",
-      [nama_pelanggan, parseInt(total_harga), detailStr, cleanId],
-    );
-
-    // Sinkronkan ke tabel pembayaran
-    await dbExecute(
-      "UPDATE pembayaran SET nama_pelanggan=?, total_harga=? WHERE pesanan_id=?",
-      [nama_pelanggan, parseInt(total_harga), cleanId],
-    );
-
     res.json({ message: "Ok" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.delete("/api/pesanan/:id", authenticateToken, async (req, res) => {
-  try {
-    const cleanId = parseInt(req.params.id.toString().split(":")[0]);
-    await dbExecute("DELETE FROM pesanan WHERE id = ?", [cleanId]);
-    await dbExecute("DELETE FROM pembayaran WHERE pesanan_id = ?", [cleanId]);
-    res.json({ message: "Ok" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// PEMBAYARAN
 app.get("/api/pembayaran", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute(
@@ -230,11 +167,10 @@ app.get("/api/pembayaran", authenticateToken, async (req, res) => {
 app.put("/api/pembayaran/:id", authenticateToken, async (req, res) => {
   const { metode, status } = req.body;
   try {
-    const cleanId = parseInt(req.params.id.toString().split(":")[0]);
     await dbExecute("UPDATE pembayaran SET metode=?, status=? WHERE id=?", [
       metode,
       status,
-      cleanId,
+      parseInt(req.params.id),
     ]);
     res.json({ message: "Ok" });
   } catch (err) {
@@ -242,4 +178,11 @@ app.put("/api/pembayaran/:id", authenticateToken, async (req, res) => {
   }
 });
 
+// PENTING UNTUK VERCEL: Export app
 module.exports = app;
+
+// Jalankan server jika tidak di lingkungan Vercel
+if (process.env.NODE_ENV !== "production") {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => console.log(`Server jalan di port ${PORT}`));
+}
