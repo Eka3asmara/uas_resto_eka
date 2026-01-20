@@ -24,6 +24,7 @@ const turso = axios.create({
   },
 });
 
+// FIXED: Fungsi ini sekarang mengembalikan lastInsertRowid
 async function dbExecute(sql, args = []) {
   try {
     const mappedArgs = args.map((arg) => {
@@ -42,6 +43,7 @@ async function dbExecute(sql, args = []) {
       throw new Error(resultResponse.error.message);
     const result = resultResponse.response.result;
     return {
+      lastInsertRowid: result.last_insert_rowid, // Penting untuk tabel pembayaran
       rows: result.rows.map((row) => {
         let obj = {};
         result.cols.forEach((col, i) => {
@@ -71,7 +73,7 @@ const authenticateToken = (req, res, next) => {
 
 app.get("/", (req, res) => res.json({ message: "Ready", status: "Online" }));
 
-// AUTH
+// AUTH (Login tetap sama)
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -111,7 +113,7 @@ app.get("/api/stats", authenticateToken, async (req, res) => {
   }
 });
 
-/// PESANAN (FIXED: Menangani Nama Kolom & Route Update)
+// PESANAN (FIXED: Tambah & Edit)
 app.get("/api/pesanan", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute("SELECT * FROM pesanan ORDER BY id DESC");
@@ -122,32 +124,29 @@ app.get("/api/pesanan", authenticateToken, async (req, res) => {
 });
 
 app.post("/api/pesanan", authenticateToken, async (req, res) => {
-  // Pastikan nama variabel dari req.body sesuai dengan yang dikirim Frontend
   const { customer_name, items, total_harga } = req.body;
   try {
     const itemsStr = typeof items === "string" ? items : JSON.stringify(items);
 
-    // SESUAI SKEMA ANDA: nama_pelanggan dan detail_pesanan
+    // 1. Simpan ke tabel pesanan
     const result = await dbExecute(
       "INSERT INTO pesanan (nama_pelanggan, detail_pesanan, total_harga) VALUES (?, ?, ?)",
       [customer_name, itemsStr, parseInt(total_harga)],
     );
 
-    // Otomatis buat data pembayaran
-    try {
-      await dbExecute(
-        "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga, status, metode) VALUES (?, ?, ?, ?, ?)",
-        [
-          result.lastInsertRowid,
-          customer_name,
-          parseInt(total_harga),
-          "pending",
-          "cash",
-        ],
-      );
-    } catch (payErr) {
-      console.error("Gagal buat pembayaran otomatis:", payErr.message);
-    }
+    const newOrderId = result.lastInsertRowid;
+
+    // 2. Simpan ke tabel pembayaran (Otomatis)
+    await dbExecute(
+      "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga, status, metode) VALUES (?, ?, ?, ?, ?)",
+      [
+        parseInt(newOrderId),
+        customer_name,
+        parseInt(total_harga),
+        "pending",
+        "cash",
+      ],
+    );
 
     res.json({ message: "Ok" });
   } catch (error) {
@@ -155,16 +154,23 @@ app.post("/api/pesanan", authenticateToken, async (req, res) => {
   }
 });
 
-// ROUTE BARU: Menangani Update Pesanan agar tidak Error 404
 app.put("/api/pesanan/:id", authenticateToken, async (req, res) => {
   const { customer_name, items, total_harga } = req.body;
   try {
     const itemsStr = typeof items === "string" ? items : JSON.stringify(items);
 
+    // Update tabel pesanan
     await dbExecute(
       "UPDATE pesanan SET nama_pelanggan=?, detail_pesanan=?, total_harga=? WHERE id=?",
       [customer_name, itemsStr, parseInt(total_harga), parseInt(req.params.id)],
     );
+
+    // Update juga nama & total di tabel pembayaran agar sinkron
+    await dbExecute(
+      "UPDATE pembayaran SET nama_pelanggan=?, total_harga=? WHERE pesanan_id=?",
+      [customer_name, parseInt(total_harga), parseInt(req.params.id)],
+    );
+
     res.json({ message: "Ok" });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -173,7 +179,11 @@ app.put("/api/pesanan/:id", authenticateToken, async (req, res) => {
 
 app.delete("/api/pesanan/:id", authenticateToken, async (req, res) => {
   try {
+    // Hapus di kedua tabel agar tidak ada data sampah
     await dbExecute("DELETE FROM pesanan WHERE id = ?", [
+      parseInt(req.params.id),
+    ]);
+    await dbExecute("DELETE FROM pembayaran WHERE pesanan_id = ?", [
       parseInt(req.params.id),
     ]);
     res.json({ message: "Ok" });
@@ -182,7 +192,7 @@ app.delete("/api/pesanan/:id", authenticateToken, async (req, res) => {
   }
 });
 
-// PEMBAYARAN (GET, PUT, DELETE)
+// PEMBAYARAN (FIXED)
 app.get("/api/pembayaran", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute(
@@ -200,17 +210,6 @@ app.put("/api/pembayaran/:id", authenticateToken, async (req, res) => {
     await dbExecute("UPDATE pembayaran SET metode=?, status=? WHERE id=?", [
       metode,
       status,
-      parseInt(req.params.id),
-    ]);
-    res.json({ message: "Ok" });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.delete("/api/pembayaran/:id", authenticateToken, async (req, res) => {
-  try {
-    await dbExecute("DELETE FROM pembayaran WHERE id = ?", [
       parseInt(req.params.id),
     ]);
     res.json({ message: "Ok" });
