@@ -69,10 +69,9 @@ const authenticateToken = (req, res, next) => {
 
 // --- ROUTES ---
 
-// Health Check
 app.get("/", (req, res) => res.json({ message: "Ready", status: "Online" }));
 
-// Auth
+// AUTH
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -94,7 +93,7 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-// Stats
+// STATS
 app.get("/api/stats", authenticateToken, async (req, res) => {
   try {
     const m = await dbExecute("SELECT COUNT(*) as total FROM menu");
@@ -112,7 +111,7 @@ app.get("/api/stats", authenticateToken, async (req, res) => {
   }
 });
 
-// Menu
+// MENU (GET, POST, PUT, DELETE)
 app.get("/api/menu", async (req, res) => {
   try {
     const { rows } = await dbExecute("SELECT * FROM menu ORDER BY id DESC");
@@ -135,7 +134,29 @@ app.post("/api/menu", authenticateToken, async (req, res) => {
   }
 });
 
-// Pesanan (Penting!)
+app.put("/api/menu/:id", authenticateToken, async (req, res) => {
+  const { nama_menu, harga, kategori } = req.body;
+  try {
+    await dbExecute(
+      "UPDATE menu SET nama_menu=?, harga=?, kategori=? WHERE id=?",
+      [nama_menu, parseInt(harga), kategori, parseInt(req.params.id)],
+    );
+    res.json({ message: "Ok" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete("/api/menu/:id", authenticateToken, async (req, res) => {
+  try {
+    await dbExecute("DELETE FROM menu WHERE id = ?", [parseInt(req.params.id)]);
+    res.json({ message: "Ok" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PESANAN (GET, POST, DELETE)
 app.get("/api/pesanan", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute("SELECT * FROM pesanan ORDER BY id DESC");
@@ -158,7 +179,18 @@ app.post("/api/pesanan", authenticateToken, async (req, res) => {
   }
 });
 
-// Pembayaran
+app.delete("/api/pesanan/:id", authenticateToken, async (req, res) => {
+  try {
+    await dbExecute("DELETE FROM pesanan WHERE id = ?", [
+      parseInt(req.params.id),
+    ]);
+    res.json({ message: "Ok" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PEMBAYARAN (GET, PUT, DELETE)
 app.get("/api/pembayaran", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute(
@@ -176,6 +208,17 @@ app.put("/api/pembayaran/:id", authenticateToken, async (req, res) => {
     await dbExecute("UPDATE pembayaran SET metode=?, status=? WHERE id=?", [
       metode,
       status,
+      parseInt(req.params.id),
+    ]);
+    res.json({ message: "Ok" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete("/api/pembayaran/:id", authenticateToken, async (req, res) => {
+  try {
+    await dbExecute("DELETE FROM pembayaran WHERE id = ?", [
       parseInt(req.params.id),
     ]);
     res.json({ message: "Ok" });
