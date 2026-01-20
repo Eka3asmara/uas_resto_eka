@@ -111,22 +111,42 @@ app.get("/api/stats", authenticateToken, async (req, res) => {
   }
 });
 
-// MENU (GET, POST, PUT, DELETE)
-app.get("/api/menu", async (req, res) => {
+// PESANAN (FIXED: GET, POST, PUT, DELETE)
+app.get("/api/pesanan", authenticateToken, async (req, res) => {
   try {
-    const { rows } = await dbExecute("SELECT * FROM menu ORDER BY id DESC");
+    const { rows } = await dbExecute("SELECT * FROM pesanan ORDER BY id DESC");
     res.json(rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.post("/api/menu", authenticateToken, async (req, res) => {
-  const { nama_menu, harga, kategori } = req.body;
+app.post("/api/pesanan", authenticateToken, async (req, res) => {
+  const { customer_name, items, total_harga } = req.body;
   try {
+    // Pastikan items adalah string JSON dan total_harga adalah angka
+    const itemsStr = typeof items === "string" ? items : JSON.stringify(items);
+
     await dbExecute(
-      "INSERT INTO menu (nama_menu, harga, kategori) VALUES (?, ?, ?)",
-      [nama_menu, parseInt(harga), kategori],
+      "INSERT INTO pesanan (nama_pelanggan, detail_pesanan, total_harga) VALUES (?, ?, ?)",
+      [customer_name, itemsStr, parseInt(total_harga)],
+    );
+    res.json({ message: "Ok" });
+  } catch (error) {
+    console.error("❌ Detail Error:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// TAMBAHKAN RUTE PUT INI AGAR BISA UPDATE/EDIT PESANAN
+app.put("/api/pesanan/:id", authenticateToken, async (req, res) => {
+  const { customer_name, items, total_harga } = req.body;
+  try {
+    const itemsStr = typeof items === "string" ? items : JSON.stringify(items);
+
+    await dbExecute(
+      "UPDATE pesanan SET nama_pelanggan=?, detail_pesanan=?, total_harga=? WHERE id=?",
+      [customer_name, itemsStr, parseInt(total_harga), parseInt(req.params.id)],
     );
     res.json({ message: "Ok" });
   } catch (error) {
@@ -134,22 +154,11 @@ app.post("/api/menu", authenticateToken, async (req, res) => {
   }
 });
 
-app.put("/api/menu/:id", authenticateToken, async (req, res) => {
-  const { nama_menu, harga, kategori } = req.body;
+app.delete("/api/pesanan/:id", authenticateToken, async (req, res) => {
   try {
-    await dbExecute(
-      "UPDATE menu SET nama_menu=?, harga=?, kategori=? WHERE id=?",
-      [nama_menu, parseInt(harga), kategori, parseInt(req.params.id)],
-    );
-    res.json({ message: "Ok" });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.delete("/api/menu/:id", authenticateToken, async (req, res) => {
-  try {
-    await dbExecute("DELETE FROM menu WHERE id = ?", [parseInt(req.params.id)]);
+    await dbExecute("DELETE FROM pesanan WHERE id = ?", [
+      parseInt(req.params.id),
+    ]);
     res.json({ message: "Ok" });
   } catch (error) {
     res.status(500).json({ error: error.message });
