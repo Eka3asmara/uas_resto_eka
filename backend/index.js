@@ -7,7 +7,7 @@ const bcrypt = require("bcrypt");
 
 const app = express();
 
-// --- PERBAIKAN CORS ---
+// --- KONFIGURASI CORS (LENGKAP) ---
 app.use(
   cors({
     origin: [
@@ -36,7 +36,7 @@ const turso = axios.create({
   },
 });
 
-// --- FUNGSI EKSEKUSI DATABASE ---
+// FUNGSI EKSEKUSI DATABASE
 async function dbExecute(sql, args = []) {
   try {
     const mappedArgs = args.map((arg) => {
@@ -55,6 +55,7 @@ async function dbExecute(sql, args = []) {
       throw new Error(resultResponse.error.message);
     const result = resultResponse.response.result;
     return {
+      lastInsertRowid: result.last_insert_rowid,
       rows: result.rows.map((row) => {
         let obj = {};
         result.cols.forEach((col, i) => {
@@ -69,12 +70,11 @@ async function dbExecute(sql, args = []) {
   }
 }
 
-// --- MIDDLEWARE PROTEKSI ---
+// MIDDLEWARE PROTEKSI
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
   if (!token) return res.status(401).json({ message: "Akses Ditolak" });
-
   jwt.verify(token, process.env.JWT_SECRET || "secret", (err, user) => {
     if (err) return res.status(403).json({ message: "Sesi Habis" });
     req.user = user;
@@ -84,28 +84,28 @@ const authenticateToken = (req, res, next) => {
 
 // --- ROUTES ---
 
-app.get("/", (req, res) => {
-  res.json({
-    message: "Server Eka Resto Online",
-    status: "Ready",
-    db_status: tursoUrl ? "Configured" : "Missing URL",
-  });
-});
+app.get("/", (req, res) => res.json({ message: "Ready", status: "Online" }));
 
-// --- NEW: ROUTE STATISTIK UNTUK DASHBOARD ---
-app.get("/api/stats", async (req, res) => {
+// 1. STATS (Diperbaiki agar angka di Dashboard muncul)
+app.get("/api/stats", authenticateToken, async (req, res) => {
   try {
-    const menuRes = await dbExecute("SELECT COUNT(*) as count FROM menu");
-    const pesananRes = await dbExecute("SELECT COUNT(*) as count FROM pesanan");
+    const m = await dbExecute("SELECT COUNT(*) as total FROM menu");
+    const p = await dbExecute("SELECT COUNT(*) as total FROM pesanan");
+    const d = await dbExecute(
+      "SELECT SUM(total_harga) as total FROM pembayaran WHERE UPPER(status) = 'LUNAS'",
+    );
+
     res.json({
-      totalMenu: menuRes.rows[0].count || 0,
-      totalPesanan: pesananRes.rows[0].count || 0,
+      totalMenu: Number(m.rows[0]?.total) || 0,
+      totalPesanan: Number(p.rows[0]?.total) || 0,
+      totalPendapatan: Number(d.rows[0]?.total) || 0,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
+// 2. LOGIN
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -113,22 +113,23 @@ app.post("/api/login", async (req, res) => {
       email,
     ]);
     if (rows.length === 0)
-      return res.status(401).json({ message: "Email tidak terdaftar!" });
+      return res.status(401).json({ message: "Email salah" });
 
     const isMatch = await bcrypt.compare(password, rows[0].password);
-    if (!isMatch) return res.status(401).json({ message: "Password salah!" });
+    if (!isMatch) return res.status(401).json({ message: "Password salah" });
 
     const token = jwt.sign(
-      { id: rows[0].id, email: rows[0].email },
+      { id: rows[0].id },
       process.env.JWT_SECRET || "secret",
       { expiresIn: "24h" },
     );
     res.json({ token });
   } catch (error) {
-    res.status(500).json({ message: "Kesalahan server" });
+    res.status(500).json({ error: error.message });
   }
 });
 
+// 3. MENU (Tambahkan route ini jika belum ada)
 app.get("/api/menu", async (req, res) => {
   try {
     const { rows } = await dbExecute("SELECT * FROM menu ORDER BY id DESC");
@@ -138,19 +139,7 @@ app.get("/api/menu", async (req, res) => {
   }
 });
 
-app.post("/api/menu", authenticateToken, async (req, res) => {
-  const { nama_menu, harga, kategori } = req.body;
-  try {
-    await dbExecute(
-      "INSERT INTO menu (nama_menu, harga, kategori) VALUES (?, ?, ?)",
-      [nama_menu, parseInt(harga), kategori],
-    );
-    res.json({ message: "Menu Ditambah" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
+// 4. PESANAN
 app.get("/api/pesanan", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute("SELECT * FROM pesanan ORDER BY id DESC");
@@ -164,20 +153,30 @@ app.post("/api/pesanan", authenticateToken, async (req, res) => {
   const { nama_pelanggan, total_harga, detail_pesanan } = req.body;
   try {
     const result = await dbExecute(
-      "INSERT INTO pesanan (nama_pelanggan, total_harga, detail_pesanan) VALUES (?, ?, ?) RETURNING id",
+      "INSERT INTO pesanan (nama_pelanggan, total_harga, detail_pesanan) VALUES (?, ?, ?)",
       [nama_pelanggan, parseInt(total_harga), detail_pesanan],
     );
-    const newId = result.rows[0].id;
+
+    const newId = result.lastInsertRowid;
+
     await dbExecute(
-      "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga) VALUES (?, ?, ?)",
-      [newId, nama_pelanggan, parseInt(total_harga)],
+      "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga, metode, status) VALUES (?, ?, ?, ?, ?)",
+      [
+        parseInt(newId),
+        nama_pelanggan,
+        parseInt(total_harga),
+        "Cash",
+        "Pending",
+      ],
     );
-    res.json({ message: "Ok" });
+
+    res.json({ message: "Ok", id: newId });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
+// 5. PEMBAYARAN
 app.get("/api/pembayaran", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute(
@@ -204,8 +203,3 @@ app.put("/api/pembayaran/:id", authenticateToken, async (req, res) => {
 });
 
 module.exports = app;
-
-if (process.env.NODE_ENV !== "production") {
-  const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => console.log(`Server jalan di port ${PORT}`));
-}
