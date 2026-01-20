@@ -42,7 +42,7 @@ async function dbExecute(sql, args = []) {
       throw new Error(resultResponse.error.message);
     const result = resultResponse.response.result;
     return {
-      lastInsertRowid: result.last_insert_rowid, // Ditambahkan untuk mendapatkan ID terakhir
+      lastInsertRowid: result.last_insert_rowid,
       rows: result.rows.map((row) => {
         let obj = {};
         result.cols.forEach((col, i) => {
@@ -72,7 +72,7 @@ const authenticateToken = (req, res, next) => {
 
 app.get("/", (req, res) => res.json({ message: "Ready", status: "Online" }));
 
-// AUTH (Login)
+// AUTH
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -94,7 +94,7 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-// STATS (Dashboard)
+// STATS
 app.get("/api/stats", authenticateToken, async (req, res) => {
   try {
     const m = await dbExecute("SELECT COUNT(*) as total FROM menu");
@@ -157,7 +157,7 @@ app.delete("/api/menu/:id", authenticateToken, async (req, res) => {
   }
 });
 
-// PESANAN (DISESUAIKAN DENGAN SKEMA TABEL ANDA)
+// PESANAN (FIXED: SESUAI SKEMA DATABASE)
 app.get("/api/pesanan", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute("SELECT * FROM pesanan ORDER BY id DESC");
@@ -170,24 +170,22 @@ app.get("/api/pesanan", authenticateToken, async (req, res) => {
 app.post("/api/pesanan", authenticateToken, async (req, res) => {
   const { customer_name, items, total_harga } = req.body;
   try {
-    // Pastikan item dikonversi ke string untuk kolom detail_pesanan
     const itemsStr = typeof items === "string" ? items : JSON.stringify(items);
 
-    // 1. Simpan ke tabel pesanan (Gunakan nama kolom: nama_pelanggan, detail_pesanan)
+    // Simpan ke tabel pesanan (Gunakan nama_pelanggan & detail_pesanan)
     const result = await dbExecute(
       "INSERT INTO pesanan (nama_pelanggan, detail_pesanan, total_harga) VALUES (?, ?, ?)",
       [customer_name, itemsStr, parseInt(total_harga)],
     );
 
-    // Ambil ID pesanan yang baru saja dibuat
-    const newOrderId = result.lastInsertRowid;
+    const orderId = result.lastInsertRowid;
 
-    // 2. Simpan ke tabel pembayaran (Gunakan nama kolom: pesanan_id, nama_pelanggan)
+    // Simpan ke tabel pembayaran (Gunakan pesanan_id & nama_pelanggan)
     try {
       await dbExecute(
         "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga, status, metode) VALUES (?, ?, ?, ?, ?)",
         [
-          parseInt(newOrderId),
+          parseInt(orderId),
           customer_name,
           parseInt(total_harga),
           "pending",
@@ -195,12 +193,11 @@ app.post("/api/pesanan", authenticateToken, async (req, res) => {
         ],
       );
     } catch (payErr) {
-      console.error("Gagal buat data pembayaran otomatis:", payErr.message);
+      console.error("Auto-payment failed:", payErr.message);
     }
 
     res.json({ message: "Ok" });
   } catch (error) {
-    console.error("❌ Detail Error Pesanan:", error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -209,8 +206,7 @@ app.put("/api/pesanan/:id", authenticateToken, async (req, res) => {
   const { customer_name, items, total_harga } = req.body;
   try {
     const itemsStr = typeof items === "string" ? items : JSON.stringify(items);
-
-    // Sesuaikan kolom: nama_pelanggan, detail_pesanan
+    // Sesuaikan kolom database
     await dbExecute(
       "UPDATE pesanan SET nama_pelanggan=?, detail_pesanan=?, total_harga=? WHERE id=?",
       [customer_name, itemsStr, parseInt(total_harga), parseInt(req.params.id)],
