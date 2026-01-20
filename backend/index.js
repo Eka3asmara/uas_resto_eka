@@ -123,19 +123,34 @@ app.get("/api/pesanan", authenticateToken, async (req, res) => {
 });
 
 app.post("/api/pesanan", authenticateToken, async (req, res) => {
+  // Pastikan nama variabel sesuai dengan data yang dikirim Frontend
   const { nama_pelanggan, total_harga, detail_pesanan } = req.body;
+
   try {
+    // 1. Simpan ke tabel pesanan (Hapus RETURNING id agar tidak konflik)
     const result = await dbExecute(
-      "INSERT INTO pesanan (nama_pelanggan, total_harga, detail_pesanan) VALUES (?, ?, ?) RETURNING id",
+      "INSERT INTO pesanan (nama_pelanggan, total_harga, detail_pesanan) VALUES (?, ?, ?)",
       [nama_pelanggan, parseInt(total_harga), detail_pesanan],
     );
-    const newId = result.rows[0].id;
+
+    // 2. Ambil ID dari lastInsertRowid yang sudah kita perbaiki di dbExecute
+    const newId = result.lastInsertRowid;
+
+    // 3. Simpan ke tabel pembayaran menggunakan ID tersebut
     await dbExecute(
-      "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga) VALUES (?, ?, ?)",
-      [newId, nama_pelanggan, parseInt(total_harga)],
+      "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga, metode, status) VALUES (?, ?, ?, ?, ?)",
+      [
+        parseInt(newId),
+        nama_pelanggan,
+        parseInt(total_harga),
+        "cash",
+        "pending",
+      ],
     );
-    res.json({ message: "Ok" });
+
+    res.json({ message: "Ok", id: newId });
   } catch (err) {
+    console.error("❌ Error Simpan Pesanan:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
