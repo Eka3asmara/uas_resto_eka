@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "https://uas-resto-eka.vercel.app/api",
+  baseURL: "https://uas-resto-eka-olive.vercel.app/api",
 });
 
 // Interceptor untuk Request (Menambahkan Token)
