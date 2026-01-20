@@ -6,7 +6,7 @@ const axios = require("axios");
 const bcrypt = require("bcrypt");
 
 const app = express();
-app.use(cors({ origin: "https://uas-resto-eka-olive.vercel.app/" }));
+app.use(cors({ origin: "https://uas-resto-eka-miio.vercel.app" }));
 app.use(express.json());
 
 // --- KONFIGURASI TURSO ---
