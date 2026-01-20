@@ -217,21 +217,27 @@ app.put("/api/pesanan/:id", authenticateToken, async (req, res) => {
   const pesananId = parseInt(req.params.id);
 
   try {
-    // 1. Update data di tabel Pesanan
+    // 1. Update data utama di tabel Pesanan
     await dbExecute(
       "UPDATE pesanan SET nama_pelanggan=?, total_harga=?, detail_pesanan=? WHERE id=?",
       [nama_pelanggan, parseInt(total_harga), detail_pesanan, pesananId],
     );
 
-    // 2. Update data di tabel Pembayaran (Harga & Nama mengikuti)
-    // Ini memastikan jika harga pesanan berubah, tagihan pembayaran juga berubah
+    // 2. Update tabel Pembayaran:
+    // - total_harga diperbarui mengikuti pesanan baru
+    // - nama_pelanggan diperbarui
+    // - STATUS DIUBAH KEMBALI KE 'Pending' (karena ada perubahan data)
     await dbExecute(
-      "UPDATE pembayaran SET total_harga=?, nama_pelanggan=? WHERE pesanan_id=?",
+      "UPDATE pembayaran SET total_harga=?, nama_pelanggan=?, status='Pending' WHERE pesanan_id=?",
       [parseInt(total_harga), nama_pelanggan, pesananId],
     );
 
-    res.json({ message: "Pesanan dan data tagihan berhasil diperbarui" });
+    res.json({
+      message: "Pesanan diperbarui. Status pembayaran dikembalikan ke Pending.",
+      updatedStatus: "Pending",
+    });
   } catch (err) {
+    console.error("❌ Error Update Pesanan:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
