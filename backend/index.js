@@ -88,7 +88,7 @@ app.get("/", (req, res) => {
   res.json({ status: "API Ready" });
 });
 
-/* ---------- AUTH ---------- */
+/* ---------- LOGIN ---------- */
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
 
@@ -107,7 +107,7 @@ app.post("/api/login", async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: rows[0].id },
+      { id: rows[0].id, role: rows[0].role },
       process.env.JWT_SECRET || "secret",
       { expiresIn: "24h" },
     );
@@ -118,11 +118,32 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-/* ---------- MENU (FIX 404) ---------- */
+/* ---------- MENU ---------- */
 app.get("/api/menu", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute("SELECT * FROM menu ORDER BY id DESC");
     res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/menu", authenticateToken, async (req, res) => {
+  const { nama_menu, harga, kategori } = req.body;
+
+  if (!nama_menu || !harga) {
+    return res.status(400).json({
+      message: "Nama menu dan harga wajib diisi",
+    });
+  }
+
+  try {
+    await dbExecute(
+      "INSERT INTO menu (nama_menu, harga, kategori) VALUES (?, ?, ?)",
+      [nama_menu, Number(harga), kategori || ""],
+    );
+
+    res.json({ message: "Menu berhasil ditambahkan" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -134,7 +155,7 @@ app.get("/api/stats", authenticateToken, async (req, res) => {
     const m = await dbExecute("SELECT COUNT(*) as total FROM menu");
     const p = await dbExecute("SELECT COUNT(*) as total FROM pesanan");
     const d = await dbExecute(
-      "SELECT SUM(total_harga) as total FROM pembayaran WHERE status='lunas'",
+      "SELECT SUM(total_harga) as total FROM pembayaran WHERE status = 'lunas'",
     );
 
     res.json({
@@ -158,12 +179,12 @@ app.get("/api/pesanan", authenticateToken, async (req, res) => {
 });
 
 app.post("/api/pesanan", authenticateToken, async (req, res) => {
-  const { customer_name, items, total_harga } = req.body;
+  const { nama_pelanggan, total_harga, detail_pesanan } = req.body;
 
   try {
     await dbExecute(
-      "INSERT INTO pesanan (customer_name, items, total_harga) VALUES (?, ?, ?)",
-      [customer_name, JSON.stringify(items), total_harga],
+      "INSERT INTO pesanan (nama_pelanggan, total_harga, detail_pesanan) VALUES (?, ?, ?)",
+      [nama_pelanggan, Number(total_harga), JSON.stringify(detail_pesanan)],
     );
 
     res.json({ message: "Pesanan berhasil dibuat" });
