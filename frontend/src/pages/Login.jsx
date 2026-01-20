@@ -24,7 +24,7 @@ export default function Login() {
 
     try {
       const response = await axios.post(
-        "https://uas-resto-eka.vercel.app/api/login",
+        "https://uas-resto-eka-olive.vercel.app/api/login",
         {
           email: email,
           password: password,
