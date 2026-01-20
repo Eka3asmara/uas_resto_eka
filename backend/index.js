@@ -157,7 +157,7 @@ app.delete("/api/menu/:id", authenticateToken, async (req, res) => {
   }
 });
 
-// PESANAN (FIXED: Handling Auto-Payment & ID Pesanan)
+// PESANAN (DISESUAIKAN DENGAN SKEMA TABEL ANDA)
 app.get("/api/pesanan", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute("SELECT * FROM pesanan ORDER BY id DESC");
@@ -170,22 +170,29 @@ app.get("/api/pesanan", authenticateToken, async (req, res) => {
 app.post("/api/pesanan", authenticateToken, async (req, res) => {
   const { customer_name, items, total_harga } = req.body;
   try {
+    // Pastikan item dikonversi ke string untuk kolom detail_pesanan
     const itemsStr = typeof items === "string" ? items : JSON.stringify(items);
 
-    // 1. Simpan ke tabel pesanan dan ambil ID yang baru dibuat
+    // 1. Simpan ke tabel pesanan (Gunakan nama kolom: nama_pelanggan, detail_pesanan)
     const result = await dbExecute(
-      "INSERT INTO pesanan (customer_name, items, total_harga) VALUES (?, ?, ?)",
+      "INSERT INTO pesanan (nama_pelanggan, detail_pesanan, total_harga) VALUES (?, ?, ?)",
       [customer_name, itemsStr, parseInt(total_harga)],
     );
 
-    const newOrderId = result.lastInsertRowid; // Ambil ID pesanan untuk tabel pembayaran
+    // Ambil ID pesanan yang baru saja dibuat
+    const newOrderId = result.lastInsertRowid;
 
-    // 2. Simpan ke tabel pembayaran (Mencoba mengisi semua kolom umum)
+    // 2. Simpan ke tabel pembayaran (Gunakan nama kolom: pesanan_id, nama_pelanggan)
     try {
-      // Kita tambahkan id_pesanan jika tabel pembayaran membutuhkannya
       await dbExecute(
-        "INSERT INTO pembayaran (customer_name, total_harga, status, metode) VALUES (?, ?, ?, ?)",
-        [customer_name, parseInt(total_harga), "belum lunas", "cash"],
+        "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga, status, metode) VALUES (?, ?, ?, ?, ?)",
+        [
+          parseInt(newOrderId),
+          customer_name,
+          parseInt(total_harga),
+          "pending",
+          "cash",
+        ],
       );
     } catch (payErr) {
       console.error("Gagal buat data pembayaran otomatis:", payErr.message);
@@ -194,7 +201,7 @@ app.post("/api/pesanan", authenticateToken, async (req, res) => {
     res.json({ message: "Ok" });
   } catch (error) {
     console.error("❌ Detail Error Pesanan:", error.message);
-    res.status(500).json({ error: error.message }); // Mengirim pesan error asli Turso agar jelas
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -202,8 +209,10 @@ app.put("/api/pesanan/:id", authenticateToken, async (req, res) => {
   const { customer_name, items, total_harga } = req.body;
   try {
     const itemsStr = typeof items === "string" ? items : JSON.stringify(items);
+
+    // Sesuaikan kolom: nama_pelanggan, detail_pesanan
     await dbExecute(
-      "UPDATE pesanan SET customer_name=?, items=?, total_harga=? WHERE id=?",
+      "UPDATE pesanan SET nama_pelanggan=?, detail_pesanan=?, total_harga=? WHERE id=?",
       [customer_name, itemsStr, parseInt(total_harga), parseInt(req.params.id)],
     );
     res.json({ message: "Ok" });
