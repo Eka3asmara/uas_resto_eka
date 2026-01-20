@@ -42,7 +42,6 @@ async function dbExecute(sql, args = []) {
       throw new Error(resultResponse.error.message);
     const result = resultResponse.response.result;
     return {
-      lastInsertRowid: result.last_insert_rowid,
       rows: result.rows.map((row) => {
         let obj = {};
         result.cols.forEach((col, i) => {
@@ -112,7 +111,7 @@ app.get("/api/stats", authenticateToken, async (req, res) => {
   }
 });
 
-// MENU
+// MENU (GET, POST, PUT, DELETE)
 app.get("/api/menu", async (req, res) => {
   try {
     const { rows } = await dbExecute("SELECT * FROM menu ORDER BY id DESC");
@@ -157,7 +156,7 @@ app.delete("/api/menu/:id", authenticateToken, async (req, res) => {
   }
 });
 
-// PESANAN (FIXED: SESUAI SKEMA DATABASE)
+// PESANAN (GET, POST, DELETE)
 app.get("/api/pesanan", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute("SELECT * FROM pesanan ORDER BY id DESC");
@@ -169,59 +168,13 @@ app.get("/api/pesanan", authenticateToken, async (req, res) => {
 
 app.post("/api/pesanan", authenticateToken, async (req, res) => {
   const { customer_name, items, total_harga } = req.body;
-
-  if (!customer_name || !total_harga) {
-    return res.status(400).json({ message: "Data pesanan tidak lengkap" });
-  }
-
   try {
-    const detailPesanan =
-      typeof items === "string" ? items : JSON.stringify(items || []);
-
-    const insertPesanan = await dbExecute(
-      "INSERT INTO pesanan (nama_pelanggan, detail_pesanan, total_harga) VALUES (?, ?, ?)",
-      [customer_name, detailPesanan, Number(total_harga)],
-    );
-
-    const orderId = Number(insertPesanan.lastInsertRowid);
-
-    if (!orderId) {
-      return res.status(500).json({ message: "Gagal membuat pesanan" });
-    }
-
-    // auto insert pembayaran (AMAN)
     await dbExecute(
-      "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga, metode, status) VALUES (?, ?, ?, ?, ?)",
-      [orderId, customer_name, Number(total_harga), "cash", "pending"],
+      "INSERT INTO pesanan (customer_name, items, total_harga) VALUES (?, ?, ?)",
+      [customer_name, JSON.stringify(items), total_harga],
     );
-
-    res.json({ message: "Pesanan berhasil ditambahkan" });
+    res.json({ message: "Ok" });
   } catch (error) {
-    console.error("POST PESANAN ERROR:", error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.put("/api/pesanan/:id", authenticateToken, async (req, res) => {
-  const { customer_name, items, total_harga } = req.body;
-  const id = Number(req.params.id);
-
-  if (!id || !customer_name || !total_harga) {
-    return res.status(400).json({ message: "Data update tidak lengkap" });
-  }
-
-  try {
-    const detailPesanan =
-      typeof items === "string" ? items : JSON.stringify(items || []);
-
-    await dbExecute(
-      "UPDATE pesanan SET nama_pelanggan=?, detail_pesanan=?, total_harga=? WHERE id=?",
-      [customer_name, detailPesanan, Number(total_harga), id],
-    );
-
-    res.json({ message: "Pesanan berhasil diperbarui" });
-  } catch (error) {
-    console.error("UPDATE PESANAN ERROR:", error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -237,7 +190,7 @@ app.delete("/api/pesanan/:id", authenticateToken, async (req, res) => {
   }
 });
 
-// PEMBAYARAN
+// PEMBAYARAN (GET, PUT, DELETE)
 app.get("/api/pembayaran", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute(
