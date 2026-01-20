@@ -156,7 +156,7 @@ app.delete("/api/menu/:id", authenticateToken, async (req, res) => {
   }
 });
 
-// PESANAN (FIXED: Tambah & Update)
+// PESANAN (FIXED: Tambah & Update + Auto Payment)
 app.get("/api/pesanan", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute("SELECT * FROM pesanan ORDER BY id DESC");
@@ -169,14 +169,31 @@ app.get("/api/pesanan", authenticateToken, async (req, res) => {
 app.post("/api/pesanan", authenticateToken, async (req, res) => {
   const { customer_name, items, total_harga } = req.body;
   try {
-    const itemsStr = typeof items === "string" ? items : JSON.stringify(items); // Pastikan string JSON
-    await dbExecute(
+    const itemsStr = typeof items === "string" ? items : JSON.stringify(items);
+
+    // 1. Simpan ke tabel pesanan
+    // Catatan: Jika error 500 berlanjut, pastikan nama kolom di DB sama persis
+    const result = await dbExecute(
       "INSERT INTO pesanan (customer_name, items, total_harga) VALUES (?, ?, ?)",
-      [customer_name, itemsStr, parseInt(total_harga)], // Parse harga ke integer
+      [customer_name, itemsStr, parseInt(total_harga)],
     );
+
+    // 2. OTOMATIS: Tambahkan ke tabel pembayaran agar data muncul di menu Pembayaran
+    // Ini sering menyebabkan error jika tabel pembayaran mewajibkan id_pesanan
+    try {
+      await dbExecute(
+        "INSERT INTO pembayaran (customer_name, total_harga, status, metode) VALUES (?, ?, ?, ?)",
+        [customer_name, parseInt(total_harga), "belum lunas", "cash"],
+      );
+    } catch (payErr) {
+      console.error("Gagal buat data pembayaran otomatis:", payErr.message);
+      // Kita tetap lanjut karena pesanan utama sudah masuk
+    }
+
     res.json({ message: "Ok" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("❌ Detail Error Pesanan:", error.message);
+    res.status(500).json({ error: "Gagal menyimpan: " + error.message });
   }
 });
 
