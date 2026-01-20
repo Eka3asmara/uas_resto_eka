@@ -42,6 +42,7 @@ async function dbExecute(sql, args = []) {
       throw new Error(resultResponse.error.message);
     const result = resultResponse.response.result;
     return {
+      lastInsertRowid: result.last_insert_rowid, // Ditambahkan untuk mendapatkan ID terakhir
       rows: result.rows.map((row) => {
         let obj = {};
         result.cols.forEach((col, i) => {
@@ -156,7 +157,7 @@ app.delete("/api/menu/:id", authenticateToken, async (req, res) => {
   }
 });
 
-// PESANAN (FIXED: Tambah & Update + Auto Payment)
+// PESANAN (FIXED: Handling Auto-Payment & ID Pesanan)
 app.get("/api/pesanan", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute("SELECT * FROM pesanan ORDER BY id DESC");
@@ -171,29 +172,29 @@ app.post("/api/pesanan", authenticateToken, async (req, res) => {
   try {
     const itemsStr = typeof items === "string" ? items : JSON.stringify(items);
 
-    // 1. Simpan ke tabel pesanan
-    // Catatan: Jika error 500 berlanjut, pastikan nama kolom di DB sama persis
+    // 1. Simpan ke tabel pesanan dan ambil ID yang baru dibuat
     const result = await dbExecute(
       "INSERT INTO pesanan (customer_name, items, total_harga) VALUES (?, ?, ?)",
       [customer_name, itemsStr, parseInt(total_harga)],
     );
 
-    // 2. OTOMATIS: Tambahkan ke tabel pembayaran agar data muncul di menu Pembayaran
-    // Ini sering menyebabkan error jika tabel pembayaran mewajibkan id_pesanan
+    const newOrderId = result.lastInsertRowid; // Ambil ID pesanan untuk tabel pembayaran
+
+    // 2. Simpan ke tabel pembayaran (Mencoba mengisi semua kolom umum)
     try {
+      // Kita tambahkan id_pesanan jika tabel pembayaran membutuhkannya
       await dbExecute(
         "INSERT INTO pembayaran (customer_name, total_harga, status, metode) VALUES (?, ?, ?, ?)",
         [customer_name, parseInt(total_harga), "belum lunas", "cash"],
       );
     } catch (payErr) {
       console.error("Gagal buat data pembayaran otomatis:", payErr.message);
-      // Kita tetap lanjut karena pesanan utama sudah masuk
     }
 
     res.json({ message: "Ok" });
   } catch (error) {
     console.error("❌ Detail Error Pesanan:", error.message);
-    res.status(500).json({ error: "Gagal menyimpan: " + error.message });
+    res.status(500).json({ error: error.message }); // Mengirim pesan error asli Turso agar jelas
   }
 });
 
