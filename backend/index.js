@@ -113,94 +113,41 @@ app.get("/api/stats", authenticateToken, async (req, res) => {
   }
 });
 
-// PESANAN (FIXED: Tambah & Edit)
 app.get("/api/pesanan", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute("SELECT * FROM pesanan ORDER BY id DESC");
     res.json(rows);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
 app.post("/api/pesanan", authenticateToken, async (req, res) => {
-  const { customer_name, items, total_harga } = req.body;
+  const { nama_pelanggan, total_harga, detail_pesanan } = req.body;
   try {
-    const itemsStr = typeof items === "string" ? items : JSON.stringify(items);
-
-    // 1. Simpan ke tabel pesanan
     const result = await dbExecute(
-      "INSERT INTO pesanan (nama_pelanggan, detail_pesanan, total_harga) VALUES (?, ?, ?)",
-      [customer_name, itemsStr, parseInt(total_harga)],
+      "INSERT INTO pesanan (nama_pelanggan, total_harga, detail_pesanan) VALUES (?, ?, ?) RETURNING id",
+      [nama_pelanggan, parseInt(total_harga), detail_pesanan],
     );
-
-    const newOrderId = result.lastInsertRowid;
-
-    // 2. Simpan ke tabel pembayaran (Otomatis)
+    const newId = result.rows[0].id;
     await dbExecute(
-      "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga, status, metode) VALUES (?, ?, ?, ?, ?)",
-      [
-        parseInt(newOrderId),
-        customer_name,
-        parseInt(total_harga),
-        "pending",
-        "cash",
-      ],
+      "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga) VALUES (?, ?, ?)",
+      [newId, nama_pelanggan, parseInt(total_harga)],
     );
-
     res.json({ message: "Ok" });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
-app.put("/api/pesanan/:id", authenticateToken, async (req, res) => {
-  const { customer_name, items, total_harga } = req.body;
-  try {
-    const itemsStr = typeof items === "string" ? items : JSON.stringify(items);
-
-    // Update tabel pesanan
-    await dbExecute(
-      "UPDATE pesanan SET nama_pelanggan=?, detail_pesanan=?, total_harga=? WHERE id=?",
-      [customer_name, itemsStr, parseInt(total_harga), parseInt(req.params.id)],
-    );
-
-    // Update juga nama & total di tabel pembayaran agar sinkron
-    await dbExecute(
-      "UPDATE pembayaran SET nama_pelanggan=?, total_harga=? WHERE pesanan_id=?",
-      [customer_name, parseInt(total_harga), parseInt(req.params.id)],
-    );
-
-    res.json({ message: "Ok" });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.delete("/api/pesanan/:id", authenticateToken, async (req, res) => {
-  try {
-    // Hapus di kedua tabel agar tidak ada data sampah
-    await dbExecute("DELETE FROM pesanan WHERE id = ?", [
-      parseInt(req.params.id),
-    ]);
-    await dbExecute("DELETE FROM pembayaran WHERE pesanan_id = ?", [
-      parseInt(req.params.id),
-    ]);
-    res.json({ message: "Ok" });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// PEMBAYARAN (FIXED)
 app.get("/api/pembayaran", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute(
       "SELECT * FROM pembayaran ORDER BY id DESC",
     );
     res.json(rows);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -213,8 +160,8 @@ app.put("/api/pembayaran/:id", authenticateToken, async (req, res) => {
       parseInt(req.params.id),
     ]);
     res.json({ message: "Ok" });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
