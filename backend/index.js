@@ -195,6 +195,7 @@ app.post("/api/pesanan", authenticateToken, async (req, res) => {
 
     const newId = result.lastInsertRowid;
 
+    // Otomatis buat data pembayaran awal
     await dbExecute(
       "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga, metode, status) VALUES (?, ?, ?, ?, ?)",
       [
@@ -206,42 +207,44 @@ app.post("/api/pesanan", authenticateToken, async (req, res) => {
       ],
     );
 
-    res.json({ message: "Ok", id: newId });
+    res.json({ message: "Pesanan & Pembayaran dibuat", id: newId });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-// Edit/Update Pesanan (PUT)
 app.put("/api/pesanan/:id", authenticateToken, async (req, res) => {
   const { nama_pelanggan, total_harga, detail_pesanan } = req.body;
+  const pesananId = parseInt(req.params.id);
+
   try {
+    // 1. Update data di tabel Pesanan
     await dbExecute(
       "UPDATE pesanan SET nama_pelanggan=?, total_harga=?, detail_pesanan=? WHERE id=?",
-      [
-        nama_pelanggan,
-        parseInt(total_harga),
-        detail_pesanan,
-        parseInt(req.params.id),
-      ],
+      [nama_pelanggan, parseInt(total_harga), detail_pesanan, pesananId],
     );
-    res.json({ message: "Pesanan berhasil diupdate" });
+
+    // 2. Update data di tabel Pembayaran (Harga & Nama mengikuti)
+    // Ini memastikan jika harga pesanan berubah, tagihan pembayaran juga berubah
+    await dbExecute(
+      "UPDATE pembayaran SET total_harga=?, nama_pelanggan=? WHERE pesanan_id=?",
+      [parseInt(total_harga), nama_pelanggan, pesananId],
+    );
+
+    res.json({ message: "Pesanan dan data tagihan berhasil diperbarui" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Hapus Pesanan (DELETE)
 app.delete("/api/pesanan/:id", authenticateToken, async (req, res) => {
+  const pesananId = parseInt(req.params.id);
   try {
-    // Hapus pembayaran terkait dulu agar tidak error constraint (jika ada)
-    await dbExecute("DELETE FROM pembayaran WHERE pesanan_id=?", [
-      parseInt(req.params.id),
-    ]);
-    // Baru hapus pesanannya
-    await dbExecute("DELETE FROM pesanan WHERE id=?", [
-      parseInt(req.params.id),
-    ]);
-    res.json({ message: "Pesanan berhasil dihapus" });
+    // Hapus tagihan pembayarannya dulu
+    await dbExecute("DELETE FROM pembayaran WHERE pesanan_id=?", [pesananId]);
+    // Hapus pesanannya
+    await dbExecute("DELETE FROM pesanan WHERE id=?", [pesananId]);
+
+    res.json({ message: "Pesanan dan tagihan dihapus" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
