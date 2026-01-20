@@ -71,7 +71,7 @@ const authenticateToken = (req, res, next) => {
 
 app.get("/", (req, res) => res.json({ message: "Ready", status: "Online" }));
 
-// AUTH
+// AUTH (Login)
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -93,7 +93,7 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-// STATS
+// STATS (Dashboard)
 app.get("/api/stats", authenticateToken, async (req, res) => {
   try {
     const m = await dbExecute("SELECT COUNT(*) as total FROM menu");
@@ -111,7 +111,7 @@ app.get("/api/stats", authenticateToken, async (req, res) => {
   }
 });
 
-// MENU (GET, POST, PUT, DELETE)
+// MENU
 app.get("/api/menu", async (req, res) => {
   try {
     const { rows } = await dbExecute("SELECT * FROM menu ORDER BY id DESC");
@@ -156,7 +156,7 @@ app.delete("/api/menu/:id", authenticateToken, async (req, res) => {
   }
 });
 
-// PESANAN (GET, POST, DELETE)
+// PESANAN (FIXED: Tambah & Update)
 app.get("/api/pesanan", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute("SELECT * FROM pesanan ORDER BY id DESC");
@@ -169,9 +169,24 @@ app.get("/api/pesanan", authenticateToken, async (req, res) => {
 app.post("/api/pesanan", authenticateToken, async (req, res) => {
   const { customer_name, items, total_harga } = req.body;
   try {
+    const itemsStr = typeof items === "string" ? items : JSON.stringify(items); // Pastikan string JSON
     await dbExecute(
       "INSERT INTO pesanan (customer_name, items, total_harga) VALUES (?, ?, ?)",
-      [customer_name, JSON.stringify(items), total_harga],
+      [customer_name, itemsStr, parseInt(total_harga)], // Parse harga ke integer
+    );
+    res.json({ message: "Ok" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put("/api/pesanan/:id", authenticateToken, async (req, res) => {
+  const { customer_name, items, total_harga } = req.body;
+  try {
+    const itemsStr = typeof items === "string" ? items : JSON.stringify(items);
+    await dbExecute(
+      "UPDATE pesanan SET customer_name=?, items=?, total_harga=? WHERE id=?",
+      [customer_name, itemsStr, parseInt(total_harga), parseInt(req.params.id)],
     );
     res.json({ message: "Ok" });
   } catch (error) {
@@ -190,7 +205,7 @@ app.delete("/api/pesanan/:id", authenticateToken, async (req, res) => {
   }
 });
 
-// PEMBAYARAN (GET, PUT, DELETE)
+// PEMBAYARAN
 app.get("/api/pembayaran", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute(
