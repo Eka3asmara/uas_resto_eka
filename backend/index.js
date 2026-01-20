@@ -138,6 +138,42 @@ app.get("/api/menu", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+app.post("/api/menu", authenticateToken, async (req, res) => {
+  const { nama_menu, harga, kategori } = req.body;
+  try {
+    await dbExecute(
+      "INSERT INTO menu (nama_menu, harga, kategori) VALUES (?, ?, ?)",
+      [nama_menu, parseInt(harga), kategori],
+    );
+    res.json({ message: "Menu berhasil ditambah" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Edit/Update Menu (PUT)
+app.put("/api/menu/:id", authenticateToken, async (req, res) => {
+  const { nama_menu, harga, kategori } = req.body;
+  try {
+    await dbExecute(
+      "UPDATE menu SET nama_menu=?, harga=?, kategori=? WHERE id=?",
+      [nama_menu, parseInt(harga), kategori, parseInt(req.params.id)],
+    );
+    res.json({ message: "Menu berhasil diupdate" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Hapus Menu (DELETE)
+app.delete("/api/menu/:id", authenticateToken, async (req, res) => {
+  try {
+    await dbExecute("DELETE FROM menu WHERE id=?", [parseInt(req.params.id)]);
+    res.json({ message: "Menu berhasil dihapus" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // 4. PESANAN
 app.get("/api/pesanan", authenticateToken, async (req, res) => {
@@ -175,7 +211,41 @@ app.post("/api/pesanan", authenticateToken, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// Edit/Update Pesanan (PUT)
+app.put("/api/pesanan/:id", authenticateToken, async (req, res) => {
+  const { nama_pelanggan, total_harga, detail_pesanan } = req.body;
+  try {
+    await dbExecute(
+      "UPDATE pesanan SET nama_pelanggan=?, total_harga=?, detail_pesanan=? WHERE id=?",
+      [
+        nama_pelanggan,
+        parseInt(total_harga),
+        detail_pesanan,
+        parseInt(req.params.id),
+      ],
+    );
+    res.json({ message: "Pesanan berhasil diupdate" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
+// Hapus Pesanan (DELETE)
+app.delete("/api/pesanan/:id", authenticateToken, async (req, res) => {
+  try {
+    // Hapus pembayaran terkait dulu agar tidak error constraint (jika ada)
+    await dbExecute("DELETE FROM pembayaran WHERE pesanan_id=?", [
+      parseInt(req.params.id),
+    ]);
+    // Baru hapus pesanannya
+    await dbExecute("DELETE FROM pesanan WHERE id=?", [
+      parseInt(req.params.id),
+    ]);
+    res.json({ message: "Pesanan berhasil dihapus" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 // 5. PEMBAYARAN
 app.get("/api/pembayaran", authenticateToken, async (req, res) => {
   try {
