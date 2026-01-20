@@ -97,14 +97,9 @@ app.get("/api/stats", async (req, res) => {
   try {
     const menuRes = await dbExecute("SELECT COUNT(*) as count FROM menu");
     const pesananRes = await dbExecute("SELECT COUNT(*) as count FROM pesanan");
-    const bayarRes = await dbExecute(
-      "SELECT SUM(total_harga) as total FROM pembayaran WHERE status = 'Lunas'",
-    );
-
     res.json({
       totalMenu: menuRes.rows[0].count || 0,
       totalPesanan: pesananRes.rows[0].count || 0,
-      totalPendapatan: bayarRes.rows[0].total || 0,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
