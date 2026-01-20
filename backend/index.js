@@ -111,7 +111,7 @@ app.get("/api/stats", authenticateToken, async (req, res) => {
   }
 });
 
-// PESANAN (FIXED: GET, POST, PUT, DELETE)
+/// PESANAN (FIXED: Menangani Nama Kolom & Route Update)
 app.get("/api/pesanan", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute("SELECT * FROM pesanan ORDER BY id DESC");
@@ -122,23 +122,40 @@ app.get("/api/pesanan", authenticateToken, async (req, res) => {
 });
 
 app.post("/api/pesanan", authenticateToken, async (req, res) => {
+  // Pastikan nama variabel dari req.body sesuai dengan yang dikirim Frontend
   const { customer_name, items, total_harga } = req.body;
   try {
-    // Pastikan items adalah string JSON dan total_harga adalah angka
     const itemsStr = typeof items === "string" ? items : JSON.stringify(items);
 
-    await dbExecute(
+    // SESUAI SKEMA ANDA: nama_pelanggan dan detail_pesanan
+    const result = await dbExecute(
       "INSERT INTO pesanan (nama_pelanggan, detail_pesanan, total_harga) VALUES (?, ?, ?)",
       [customer_name, itemsStr, parseInt(total_harga)],
     );
+
+    // Otomatis buat data pembayaran
+    try {
+      await dbExecute(
+        "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga, status, metode) VALUES (?, ?, ?, ?, ?)",
+        [
+          result.lastInsertRowid,
+          customer_name,
+          parseInt(total_harga),
+          "pending",
+          "cash",
+        ],
+      );
+    } catch (payErr) {
+      console.error("Gagal buat pembayaran otomatis:", payErr.message);
+    }
+
     res.json({ message: "Ok" });
   } catch (error) {
-    console.error("❌ Detail Error:", error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-// TAMBAHKAN RUTE PUT INI AGAR BISA UPDATE/EDIT PESANAN
+// ROUTE BARU: Menangani Update Pesanan agar tidak Error 404
 app.put("/api/pesanan/:id", authenticateToken, async (req, res) => {
   const { customer_name, items, total_harga } = req.body;
   try {
@@ -147,40 +164,6 @@ app.put("/api/pesanan/:id", authenticateToken, async (req, res) => {
     await dbExecute(
       "UPDATE pesanan SET nama_pelanggan=?, detail_pesanan=?, total_harga=? WHERE id=?",
       [customer_name, itemsStr, parseInt(total_harga), parseInt(req.params.id)],
-    );
-    res.json({ message: "Ok" });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.delete("/api/pesanan/:id", authenticateToken, async (req, res) => {
-  try {
-    await dbExecute("DELETE FROM pesanan WHERE id = ?", [
-      parseInt(req.params.id),
-    ]);
-    res.json({ message: "Ok" });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// PESANAN (GET, POST, DELETE)
-app.get("/api/pesanan", authenticateToken, async (req, res) => {
-  try {
-    const { rows } = await dbExecute("SELECT * FROM pesanan ORDER BY id DESC");
-    res.json(rows);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post("/api/pesanan", authenticateToken, async (req, res) => {
-  const { customer_name, items, total_harga } = req.body;
-  try {
-    await dbExecute(
-      "INSERT INTO pesanan (customer_name, items, total_harga) VALUES (?, ?, ?)",
-      [customer_name, JSON.stringify(items), total_harga],
     );
     res.json({ message: "Ok" });
   } catch (error) {
