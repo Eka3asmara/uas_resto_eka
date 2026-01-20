@@ -20,10 +20,8 @@ function App() {
   return (
     <Router>
       <Routes>
-        {/* Route Publik: Login */}
         <Route path="/" element={<Login />} />
 
-        {/* Route Terproteksi: Harus Login */}
         <Route
           path="/dashboard"
           element={
@@ -68,7 +66,6 @@ function App() {
           }
         />
 
-        {/* Redirect jika route tidak ditemukan */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>

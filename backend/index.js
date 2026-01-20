@@ -7,7 +7,7 @@ const bcrypt = require("bcrypt");
 
 const app = express();
 
-// --- KONFIGURASI CORS (LENGKAP) ---
+// --- KONFIGURASI CORS ---
 app.use(
   cors({
     origin: [
@@ -36,7 +36,7 @@ const turso = axios.create({
   },
 });
 
-// FUNGSI EKSEKUSI DATABASE
+// DATABASE
 async function dbExecute(sql, args = []) {
   try {
     const mappedArgs = args.map((arg) => {
@@ -86,7 +86,7 @@ const authenticateToken = (req, res, next) => {
 
 app.get("/", (req, res) => res.json({ message: "Ready", status: "Online" }));
 
-// 1. STATS (Diperbaiki agar angka di Dashboard muncul)
+// Dashboard
 app.get("/api/stats", authenticateToken, async (req, res) => {
   try {
     const m = await dbExecute("SELECT COUNT(*) as total FROM menu");
@@ -105,7 +105,7 @@ app.get("/api/stats", authenticateToken, async (req, res) => {
   }
 });
 
-// 2. LOGIN
+// LOGIN
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -129,7 +129,7 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-// 3. MENU (Tambahkan route ini jika belum ada)
+// MENU
 app.get("/api/menu", async (req, res) => {
   try {
     const { rows } = await dbExecute("SELECT * FROM menu ORDER BY id DESC");
@@ -175,7 +175,7 @@ app.delete("/api/menu/:id", authenticateToken, async (req, res) => {
   }
 });
 
-// 4. PESANAN
+// PESANAN
 app.get("/api/pesanan", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute("SELECT * FROM pesanan ORDER BY id DESC");
@@ -195,7 +195,6 @@ app.post("/api/pesanan", authenticateToken, async (req, res) => {
 
     const newId = result.lastInsertRowid;
 
-    // Otomatis buat data pembayaran awal
     await dbExecute(
       "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga, metode, status) VALUES (?, ?, ?, ?, ?)",
       [
@@ -217,16 +216,11 @@ app.put("/api/pesanan/:id", authenticateToken, async (req, res) => {
   const pesananId = parseInt(req.params.id);
 
   try {
-    // 1. Update data utama di tabel Pesanan
     await dbExecute(
       "UPDATE pesanan SET nama_pelanggan=?, total_harga=?, detail_pesanan=? WHERE id=?",
       [nama_pelanggan, parseInt(total_harga), detail_pesanan, pesananId],
     );
 
-    // 2. Update tabel Pembayaran:
-    // - total_harga diperbarui mengikuti pesanan baru
-    // - nama_pelanggan diperbarui
-    // - STATUS DIUBAH KEMBALI KE 'Pending' (karena ada perubahan data)
     await dbExecute(
       "UPDATE pembayaran SET total_harga=?, nama_pelanggan=?, status='Pending' WHERE pesanan_id=?",
       [parseInt(total_harga), nama_pelanggan, pesananId],
@@ -245,9 +239,8 @@ app.put("/api/pesanan/:id", authenticateToken, async (req, res) => {
 app.delete("/api/pesanan/:id", authenticateToken, async (req, res) => {
   const pesananId = parseInt(req.params.id);
   try {
-    // Hapus tagihan pembayarannya dulu
     await dbExecute("DELETE FROM pembayaran WHERE pesanan_id=?", [pesananId]);
-    // Hapus pesanannya
+
     await dbExecute("DELETE FROM pesanan WHERE id=?", [pesananId]);
 
     res.json({ message: "Pesanan dan tagihan dihapus" });
@@ -255,7 +248,8 @@ app.delete("/api/pesanan/:id", authenticateToken, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-// 5. PEMBAYARAN
+
+// PEMBAYARAN
 app.get("/api/pembayaran", authenticateToken, async (req, res) => {
   try {
     const { rows } = await dbExecute(

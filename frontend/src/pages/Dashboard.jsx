@@ -4,7 +4,6 @@ import { Utensils, ClipboardList, Banknote, RefreshCcw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 export default function Dashboard() {
-  // Gunakan state awal yang pasti (Safe Initial State)
   const [stats, setStats] = useState({
     totalMenu: 0,
     totalPesanan: 0,
@@ -14,11 +13,8 @@ export default function Dashboard() {
   const navigate = useNavigate();
 
   const fetchStats = async () => {
-    // Jangan set loading true di sini jika ingin update background,
-    // tapi untuk debug biarkan saja agar sinkronisasi terlihat.
     try {
       const res = await api.get("/stats");
-      // Safety Check: Pastikan res.data tidak null/undefined
       if (res.data) {
         setStats({
           totalMenu: res.data.totalMenu ?? 0,
@@ -37,7 +33,6 @@ export default function Dashboard() {
     fetchStats();
   }, []);
 
-  // Safe Formatter untuk Rupiah agar tidak crash jika data bukan angka
   const formatRupiah = (value) => {
     const number = Number(value) || 0;
     return `Rp ${number.toLocaleString("id-ID")}`;
@@ -54,7 +49,6 @@ export default function Dashboard() {
     );
   }
 
-  // Data Array yang sudah aman dari undefined
   const statCards = [
     {
       label: "Total Menu",
@@ -125,7 +119,6 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Status Section */}
       <div className="relative overflow-hidden bg-gradient-to-r from-yellow-500 to-yellow-600 p-1 rounded-3xl">
         <div className="bg-[#0f0f0f] p-10 rounded-[calc(1.5rem-4px)] flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="max-w-xl">
