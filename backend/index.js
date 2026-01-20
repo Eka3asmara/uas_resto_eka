@@ -169,50 +169,59 @@ app.get("/api/pesanan", authenticateToken, async (req, res) => {
 
 app.post("/api/pesanan", authenticateToken, async (req, res) => {
   const { customer_name, items, total_harga } = req.body;
-  try {
-    const itemsStr = typeof items === "string" ? items : JSON.stringify(items);
 
-    // Simpan ke tabel pesanan (Gunakan nama_pelanggan & detail_pesanan)
-    const result = await dbExecute(
+  if (!customer_name || !total_harga) {
+    return res.status(400).json({ message: "Data pesanan tidak lengkap" });
+  }
+
+  try {
+    const detailPesanan =
+      typeof items === "string" ? items : JSON.stringify(items || []);
+
+    const insertPesanan = await dbExecute(
       "INSERT INTO pesanan (nama_pelanggan, detail_pesanan, total_harga) VALUES (?, ?, ?)",
-      [customer_name, itemsStr, parseInt(total_harga)],
+      [customer_name, detailPesanan, Number(total_harga)],
     );
 
-    const orderId = result.lastInsertRowid;
+    const orderId = Number(insertPesanan.lastInsertRowid);
 
-    // Simpan ke tabel pembayaran (Gunakan pesanan_id & nama_pelanggan)
-    try {
-      await dbExecute(
-        "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga, status, metode) VALUES (?, ?, ?, ?, ?)",
-        [
-          parseInt(orderId),
-          customer_name,
-          parseInt(total_harga),
-          "pending",
-          "cash",
-        ],
-      );
-    } catch (payErr) {
-      console.error("Auto-payment failed:", payErr.message);
+    if (!orderId) {
+      return res.status(500).json({ message: "Gagal membuat pesanan" });
     }
 
-    res.json({ message: "Ok" });
+    // auto insert pembayaran (AMAN)
+    await dbExecute(
+      "INSERT INTO pembayaran (pesanan_id, nama_pelanggan, total_harga, metode, status) VALUES (?, ?, ?, ?, ?)",
+      [orderId, customer_name, Number(total_harga), "cash", "pending"],
+    );
+
+    res.json({ message: "Pesanan berhasil ditambahkan" });
   } catch (error) {
+    console.error("POST PESANAN ERROR:", error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
 app.put("/api/pesanan/:id", authenticateToken, async (req, res) => {
   const { customer_name, items, total_harga } = req.body;
+  const id = Number(req.params.id);
+
+  if (!id || !customer_name || !total_harga) {
+    return res.status(400).json({ message: "Data update tidak lengkap" });
+  }
+
   try {
-    const itemsStr = typeof items === "string" ? items : JSON.stringify(items);
-    // Sesuaikan kolom database
+    const detailPesanan =
+      typeof items === "string" ? items : JSON.stringify(items || []);
+
     await dbExecute(
       "UPDATE pesanan SET nama_pelanggan=?, detail_pesanan=?, total_harga=? WHERE id=?",
-      [customer_name, itemsStr, parseInt(total_harga), parseInt(req.params.id)],
+      [customer_name, detailPesanan, Number(total_harga), id],
     );
-    res.json({ message: "Ok" });
+
+    res.json({ message: "Pesanan berhasil diperbarui" });
   } catch (error) {
+    console.error("UPDATE PESANAN ERROR:", error.message);
     res.status(500).json({ error: error.message });
   }
 });
