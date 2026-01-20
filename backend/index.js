@@ -6,7 +6,20 @@ const axios = require("axios");
 const bcrypt = require("bcrypt");
 
 const app = express();
-app.use(cors({ origin: "https://uas-resto-eka-miio.vercel.app" }));
+
+// --- PERBAIKAN CORS DI SINI ---
+// Mengizinkan domain yang ada di gambar error kamu
+app.use(
+  cors({
+    origin: [
+      "https://uas-resto-eka-miio.vercel.app",
+      "https://uas-resto-eka-olive.vercel.app",
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
+
 app.use(express.json());
 
 // --- KONFIGURASI TURSO ---
@@ -72,7 +85,7 @@ const authenticateToken = (req, res, next) => {
 
 // --- ROUTES ---
 
-// 1. Tambahkan Route Utama agar tidak "Cannot GET /"
+// Health Check / Home
 app.get("/", (req, res) => {
   res.json({
     message: "Server Eka Resto Online",
