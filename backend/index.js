@@ -7,8 +7,7 @@ const bcrypt = require("bcrypt");
 
 const app = express();
 
-// --- PERBAIKAN CORS DI SINI ---
-// Mengizinkan domain yang ada di gambar error kamu
+// --- PERBAIKAN CORS ---
 app.use(
   cors({
     origin: [
@@ -85,13 +84,31 @@ const authenticateToken = (req, res, next) => {
 
 // --- ROUTES ---
 
-// Health Check / Home
 app.get("/", (req, res) => {
   res.json({
     message: "Server Eka Resto Online",
     status: "Ready",
     db_status: tursoUrl ? "Configured" : "Missing URL",
   });
+});
+
+// --- NEW: ROUTE STATISTIK UNTUK DASHBOARD ---
+app.get("/api/stats", async (req, res) => {
+  try {
+    const menuRes = await dbExecute("SELECT COUNT(*) as count FROM menu");
+    const pesananRes = await dbExecute("SELECT COUNT(*) as count FROM pesanan");
+    const bayarRes = await dbExecute(
+      "SELECT SUM(total_harga) as total FROM pembayaran WHERE status = 'Lunas'",
+    );
+
+    res.json({
+      totalMenu: menuRes.rows[0].count || 0,
+      totalPesanan: pesananRes.rows[0].count || 0,
+      totalPendapatan: bayarRes.rows[0].total || 0,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post("/api/login", async (req, res) => {
@@ -191,10 +208,8 @@ app.put("/api/pembayaran/:id", authenticateToken, async (req, res) => {
   }
 });
 
-// PENTING UNTUK VERCEL: Export app
 module.exports = app;
 
-// Jalankan server jika tidak di lingkungan Vercel
 if (process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => console.log(`Server jalan di port ${PORT}`));
